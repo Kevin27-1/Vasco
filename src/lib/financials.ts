@@ -111,77 +111,33 @@ export function calculateSaleStats(
   }
 }
 
-// Calculate real daily expenses without duplicate counting
+// Calculate real daily expenses recorded for a specific date
 export function calculateDailyExpense(
   expenses: ExpenseRecord[],
   targetDateStr: string
 ): number {
-  const dailyRecurring = expenses
-    .filter((e) => e.frequency === 'daily')
+  return expenses
+    .filter((e) => getExpenseDateString(e) === targetDateStr)
     .reduce((sum, e) => sum + (e.amount || 0), 0)
-
-  const nonDailyDated = expenses
-    .filter((e) => e.frequency !== 'daily' && getExpenseDateString(e) === targetDateStr)
-    .reduce((sum, e) => sum + (e.amount || 0), 0)
-
-  return dailyRecurring + nonDailyDated
 }
 
-// Calculate real monthly expenses
+// Calculate real monthly expenses recorded for a specific year-month (YYYY-MM)
 export function calculateMonthlyExpense(
   expenses: ExpenseRecord[],
   targetYearMonthStr: string
 ): number {
-  const [yearStr, monthStr] = targetYearMonthStr.split('-')
-  const year = Number(yearStr) || new Date().getFullYear()
-  const month = Number(monthStr) || new Date().getMonth() + 1
-  const daysInMonth = new Date(year, month, 0).getDate()
-
-  const dailyRecurring = expenses
-    .filter((e) => e.frequency === 'daily')
-    .reduce((sum, e) => sum + (e.amount || 0), 0) * daysInMonth
-
-  const monthlyRecurring = expenses
-    .filter((e) => e.frequency === 'monthly')
+  return expenses
+    .filter((e) => getExpenseDateString(e).startsWith(targetYearMonthStr))
     .reduce((sum, e) => sum + (e.amount || 0), 0)
-
-  const datedNonRecurring = expenses
-    .filter(
-      (e) =>
-        e.frequency !== 'daily' &&
-        e.frequency !== 'monthly' &&
-        getExpenseDateString(e).startsWith(targetYearMonthStr)
-    )
-    .reduce((sum, e) => sum + (e.amount || 0), 0)
-
-  return dailyRecurring + monthlyRecurring + datedNonRecurring
 }
 
-// Calculate real yearly expenses
+// Calculate real yearly expenses recorded for a specific year (YYYY)
 export function calculateYearlyExpense(
   expenses: ExpenseRecord[],
   targetYearStr: string
 ): number {
-  const dailyRecurring = expenses
-    .filter((e) => e.frequency === 'daily')
-    .reduce((sum, e) => sum + (e.amount || 0), 0) * 365
-
-  const monthlyRecurring = expenses
-    .filter((e) => e.frequency === 'monthly')
-    .reduce((sum, e) => sum + (e.amount || 0), 0) * 12
-
-  const yearlyRecurring = expenses
-    .filter((e) => e.frequency === 'yearly')
+  return expenses
+    .filter((e) => getExpenseDateString(e).startsWith(targetYearStr))
     .reduce((sum, e) => sum + (e.amount || 0), 0)
-
-  const datedOneTime = expenses
-    .filter(
-      (e) =>
-        e.frequency === 'one-time' &&
-        getExpenseDateString(e).startsWith(targetYearStr)
-    )
-    .reduce((sum, e) => sum + (e.amount || 0), 0)
-
-  return dailyRecurring + monthlyRecurring + yearlyRecurring + datedOneTime
 }
 

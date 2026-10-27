@@ -52,7 +52,7 @@ const chartConfig = {
   },
   expenses: {
     label: "Expenses",
-    color: "#f87171", // Coral / Light Red
+    color: "#38bdf8", // Sky Blue
   },
 } satisfies ChartConfig
 
@@ -267,7 +267,7 @@ export function ChartAreaInteractive({
           config={chartConfig}
           className="aspect-auto h-[240px] sm:h-[290px] w-full"
         >
-          <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -22, bottom: 0 }}>
+          <AreaChart data={chartData} margin={{ top: 10, right: 15, left: -15, bottom: 0 }}>
             <defs>
               {/* Net Profit Red Gradient */}
               <linearGradient id="fillNetProfit" x1="0" y1="0" x2="0" y2="1">
@@ -275,10 +275,10 @@ export function ChartAreaInteractive({
                 <stop offset="95%" stopColor="#e63946" stopOpacity={0.05} />
               </linearGradient>
 
-              {/* Expenses Coral / Light Red Gradient */}
+              {/* Expenses Sky Blue Gradient */}
               <linearGradient id="fillExpenses" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#f87171" stopOpacity={0.7} />
-                <stop offset="95%" stopColor="#f87171" stopOpacity={0.05} />
+                <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.4} />
+                <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.02} />
               </linearGradient>
             </defs>
 
@@ -294,13 +294,32 @@ export function ChartAreaInteractive({
               tick={{ fill: "#9ca3af", fontSize: 10 }}
             />
 
+            {/* Left Y-Axis for Net Profit (Red) */}
             <YAxis
+              yAxisId="profit"
               tickLine={false}
               axisLine={false}
               width={38}
-              stroke="#9ca3af"
-              tick={{ fill: "#9ca3af", fontSize: 10 }}
+              stroke="#e63946"
+              tick={{ fill: "#e63946", fontSize: 10 }}
               domain={[0, (dataMax: number) => Math.max(dataMax || 0, 5000)]}
+              tickFormatter={(val) => {
+                if (val >= 100000) return `₹${(val / 100000).toFixed(1)}L`
+                if (val >= 1000) return `₹${(val / 1000).toFixed(0)}k`
+                return `₹${val}`
+              }}
+            />
+
+            {/* Right Y-Axis for Expenses (Sky Blue) */}
+            <YAxis
+              yAxisId="expenses"
+              orientation="right"
+              tickLine={false}
+              axisLine={false}
+              width={42}
+              stroke="#38bdf8"
+              tick={{ fill: "#38bdf8", fontSize: 10 }}
+              domain={[0, (dataMax: number) => Math.max(dataMax || 0, 10000)]}
               tickFormatter={(val) => {
                 if (val >= 100000) return `₹${(val / 100000).toFixed(1)}L`
                 if (val >= 1000) return `₹${(val / 1000).toFixed(0)}k`
@@ -319,18 +338,20 @@ export function ChartAreaInteractive({
               }
             />
 
-            {/* Expenses Area */}
+            {/* Expenses Area (Sky Blue) */}
             <Area
+              yAxisId="expenses"
               dataKey="expenses"
               name="Expenses"
               type="monotone"
               fill="url(#fillExpenses)"
-              stroke="#f87171"
-              strokeWidth={2.5}
+              stroke="#38bdf8"
+              strokeWidth={2}
             />
 
-            {/* Net Profit Area */}
+            {/* Net Profit Area (Red) */}
             <Area
+              yAxisId="profit"
               dataKey="netProfit"
               name="Net Profit"
               type="monotone"
