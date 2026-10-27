@@ -302,7 +302,7 @@ export function ChartAreaInteractive({
               width={38}
               stroke="#e63946"
               tick={{ fill: "#e63946", fontSize: 10 }}
-              domain={[0, (dataMax: number) => Math.max(dataMax || 0, 5000)]}
+              domain={[0, (dataMax: number) => Math.max(dataMax || 0, activeTimeRange === 'daily' ? 2000 : 5000)]}
               tickFormatter={(val) => {
                 if (val >= 100000) return `₹${(val / 100000).toFixed(1)}L`
                 if (val >= 1000) return `₹${(val / 1000).toFixed(0)}k`
@@ -319,7 +319,7 @@ export function ChartAreaInteractive({
               width={42}
               stroke="#38bdf8"
               tick={{ fill: "#38bdf8", fontSize: 10 }}
-              domain={[0, (dataMax: number) => Math.max(dataMax || 0, 10000)]}
+              domain={[0, (dataMax: number) => Math.max(dataMax || 0, activeTimeRange === 'daily' ? 1000 : 10000)]}
               tickFormatter={(val) => {
                 if (val >= 100000) return `₹${(val / 100000).toFixed(1)}L`
                 if (val >= 1000) return `₹${(val / 1000).toFixed(0)}k`

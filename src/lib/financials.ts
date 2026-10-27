@@ -111,33 +111,68 @@ export function calculateSaleStats(
   }
 }
 
-// Calculate real daily expenses recorded for a specific date
+// Calculate real daily expenses including recurring daily operational costs (e.g. tea, cleaning)
 export function calculateDailyExpense(
   expenses: ExpenseRecord[],
   targetDateStr: string
 ): number {
-  return expenses
-    .filter((e) => getExpenseDateString(e) === targetDateStr)
+  const dailyRecurring = expenses
+    .filter((e) => e.frequency === 'daily')
     .reduce((sum, e) => sum + (e.amount || 0), 0)
+
+  const datedNonDaily = expenses
+    .filter(
+      (e) =>
+        e.frequency !== 'daily' &&
+        getExpenseDateString(e) === targetDateStr
+    )
+    .reduce((sum, e) => sum + (e.amount || 0), 0)
+
+  return dailyRecurring + datedNonDaily
 }
 
-// Calculate real monthly expenses recorded for a specific year-month (YYYY-MM)
+// Calculate real monthly expenses including daily recurring overheads across the month
 export function calculateMonthlyExpense(
   expenses: ExpenseRecord[],
   targetYearMonthStr: string
 ): number {
-  return expenses
-    .filter((e) => getExpenseDateString(e).startsWith(targetYearMonthStr))
+  const [yearStr, monthStr] = targetYearMonthStr.split('-')
+  const year = Number(yearStr) || new Date().getFullYear()
+  const month = Number(monthStr) || new Date().getMonth() + 1
+  const daysInMonth = new Date(year, month, 0).getDate()
+
+  const dailyRecurring = expenses
+    .filter((e) => e.frequency === 'daily')
+    .reduce((sum, e) => sum + (e.amount || 0), 0) * daysInMonth
+
+  const datedNonDaily = expenses
+    .filter(
+      (e) =>
+        e.frequency !== 'daily' &&
+        getExpenseDateString(e).startsWith(targetYearMonthStr)
+    )
     .reduce((sum, e) => sum + (e.amount || 0), 0)
+
+  return dailyRecurring + datedNonDaily
 }
 
-// Calculate real yearly expenses recorded for a specific year (YYYY)
+// Calculate real yearly expenses including daily recurring overheads across the year
 export function calculateYearlyExpense(
   expenses: ExpenseRecord[],
   targetYearStr: string
 ): number {
-  return expenses
-    .filter((e) => getExpenseDateString(e).startsWith(targetYearStr))
+  const dailyRecurring = expenses
+    .filter((e) => e.frequency === 'daily')
+    .reduce((sum, e) => sum + (e.amount || 0), 0) * 365
+
+  const datedNonDaily = expenses
+    .filter(
+      (e) =>
+        e.frequency !== 'daily' &&
+        getExpenseDateString(e).startsWith(targetYearStr)
+    )
     .reduce((sum, e) => sum + (e.amount || 0), 0)
+
+  return dailyRecurring + datedNonDaily
 }
 
