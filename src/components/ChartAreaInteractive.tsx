@@ -26,6 +26,14 @@ import {
 import { type SaleRecord } from "../services/salesService"
 import { type ExpenseRecord } from "../services/expenseService"
 import { type StockItem } from "../services/stockService"
+import {
+  getSaleDateString,
+  getExpenseDateString,
+  calculateSaleStats,
+  calculateDailyExpense,
+  calculateMonthlyExpense,
+  calculateYearlyExpense,
+} from "../lib/financials"
 
 export type ChartTimeRange = "daily" | "monthly" | "yearly" | "all"
 
@@ -56,7 +64,7 @@ export function ChartAreaInteractive({
   stock = [],
 }: ChartAreaInteractiveProps) {
   // Internal fallback state if uncontrolled
-  const [internalTimeRange, setInternalTimeRange] = React.useState<ChartTimeRange>("monthly")
+  const [internalTimeRange, setInternalTimeRange] = React.useState<ChartTimeRange>("daily")
   const activeTimeRange = externalTimeRange || internalTimeRange
 
   const handleRangeChange = (range: string) => {
@@ -70,36 +78,7 @@ export function ChartAreaInteractive({
 
   // Calculate dynamic Expenses and Net Profit data based on selected date range
   const chartData = React.useMemo(() => {
-    // 1. Calculate store base financial figures from real Firestore records
-    let totalSalesGrossProfit = 0
-    sales.forEach((sale) => {
-      let saleCost = 0
-      sale.items.forEach((item) => {
-        const matchingStock = stock.find(
-          (s) => s.brand === item.brand && s.model === item.model
-        )
-        const costPrice =
-          item.purchasePrice || matchingStock?.purchasePrice || item.price * 0.8
-        saleCost += costPrice * (item.qty || 1)
-      })
-      totalSalesGrossProfit += Math.max(0, (sale.totalAmount || 0) - saleCost)
-    })
-
-    const dailyRecurring = expenses
-      .filter((e) => e.frequency === "daily")
-      .reduce((sum, e) => sum + e.amount, 0)
-
-    const monthlyRecurring = expenses
-      .filter((e) => e.frequency === "monthly")
-      .reduce((sum, e) => sum + e.amount, 0)
-
-    const yearlyRecurring = expenses
-      .filter((e) => e.frequency === "yearly")
-      .reduce((sum, e) => sum + e.amount, 0)
-
-    const totalDirectExpenses = expenses.reduce((sum, e) => sum + e.amount, 0)
-
-    // A. DAILY RANGE: Past 14 days
+    // A. DAILY RANGE: Past 14 days up to today
     if (activeTimeRange === "daily") {
       const now = new Date()
       const daysCount = 14
@@ -108,161 +87,123 @@ export function ChartAreaInteractive({
       for (let i = daysCount - 1; i >= 0; i--) {
         const d = new Date(now)
         d.setDate(d.getDate() - i)
-        const dateStr = d.toISOString().split("T")[0]
+
+        const year = d.getFullYear()
+        const month = String(d.getMonth() + 1).padStart(2, "0")
+        const day = String(d.getDate()).padStart(2, "0")
+        const dateStr = `${year}-${month}-${day}`
         const displayLabel = d.toLocaleDateString("en-US", {
           month: "short",
           day: "numeric",
         })
 
         // Real sales on this day
-        const daySales = sales.filter(
-          (s) => s.date === dateStr || (s.date && s.date.startsWith(dateStr))
-        )
-        let dayRealProfit = 0
-        daySales.forEach((s) => {
-          let cost = 0
-          s.items.forEach((item) => {
-            cost += (item.purchasePrice || item.price * 0.8) * (item.qty || 1)
-          })
-          dayRealProfit += Math.max(0, s.totalAmount - cost)
-        })
+        const daySales = sales.filter((s) => getSaleDateString(s) === dateStr)
+        const { netProfit } = calculateSaleStats(daySales, stock)
 
         // Real expenses on this day
-        const dayExpenses = expenses.filter(
-          (e) => e.date === dateStr || (e.date && e.date.startsWith(dateStr))
-        )
-        const dayRealExpense =
-          dayExpenses.reduce((sum, e) => sum + e.amount, 0) +
-          (dailyRecurring > 0 ? dailyRecurring : 550)
-
-        // Realistic continuous baseline calibrated to store averages
-        const baseProfit = Math.max(
-          3500,
-          Math.round((totalSalesGrossProfit > 0 ? totalSalesGrossProfit : 42000) / 10)
-        )
-        const baseExpense = Math.max(
-          1800,
-          Math.round((totalDirectExpenses > 0 ? totalDirectExpenses : 24000) / 14)
-        )
-
-        // Natural weekday/weekend rhythm variance
-        const dayOfWeek = d.getDay()
-        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
-        const variance = isWeekend ? 1.25 : 0.85 + ((i * 3) % 4) * 0.08
-
-        const computedProfit =
-          dayRealProfit > 0
-            ? dayRealProfit
-            : Math.round(baseProfit * variance)
-
-        const computedExpense =
-          dayRealExpense > 0
-            ? dayRealExpense
-            : Math.round(baseExpense * (0.9 + ((i * 2) % 3) * 0.1))
+        const dayExpense = calculateDailyExpense(expenses, dateStr)
 
         result.push({
           date: displayLabel,
-          netProfit: computedProfit,
-          expenses: computedExpense,
+          netProfit,
+          expenses: dayExpense,
         })
       }
 
       return result
     }
 
-    // B. MONTHLY RANGE: Past 12 months
+    // B. MONTHLY RANGE: Past 12 months up to current month
     if (activeTimeRange === "monthly") {
-      const months = [
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-      ]
-      const currentMonthIdx = new Date().getMonth()
+      const now = new Date()
+      const currentYear = now.getFullYear()
       const result = []
 
-      // Show recent 10 to 12 months up to current
-      for (let i = 9; i >= 0; i--) {
-        const monthIndex = (currentMonthIdx - i + 12) % 12
-        const monthName = months[monthIndex]
-        const monthNumber = String(monthIndex + 1).padStart(2, "0")
-
-        // Look for real records matching this month
-        const monthSales = sales.filter((s) => s.date && s.date.includes(`-${monthNumber}-`))
-        let realMonthProfit = 0
-        monthSales.forEach((s) => {
-          let cost = 0
-          s.items.forEach((item) => {
-            cost += (item.purchasePrice || item.price * 0.8) * (item.qty || 1)
-          })
-          realMonthProfit += Math.max(0, s.totalAmount - cost)
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const year = d.getFullYear()
+        const month = String(d.getMonth() + 1).padStart(2, "0")
+        const yearMonthStr = `${year}-${month}`
+        const displayLabel = d.toLocaleDateString("en-US", {
+          month: "short",
+          year: year !== currentYear ? "2-digit" : undefined,
         })
 
-        const monthExpenses = expenses.filter((e) => e.date && e.date.includes(`-${monthNumber}-`))
-        const realMonthExpense =
-          monthExpenses.reduce((sum, e) => sum + e.amount, 0) +
-          (monthlyRecurring > 0 ? monthlyRecurring : 38000) +
-          (dailyRecurring * 30 || 16500)
-
-        // Baseline progression
-        const baseProfit =
-          totalSalesGrossProfit > 0
-            ? totalSalesGrossProfit * (0.8 + ((i * 5) % 6) * 0.08)
-            : 48000 + ((i * 7) % 5) * 4500
-
-        const baseExpense =
-          realMonthExpense > 0
-            ? realMonthExpense
-            : 32000 + ((i * 3) % 4) * 2200
-
-        const profitValue =
-          realMonthProfit > 0 ? realMonthProfit : Math.round(baseProfit)
-        const expenseValue = Math.round(baseExpense)
+        const monthSales = sales.filter((s) => getSaleDateString(s).startsWith(yearMonthStr))
+        const { netProfit } = calculateSaleStats(monthSales, stock)
+        const monthExpense = calculateMonthlyExpense(expenses, yearMonthStr)
 
         result.push({
-          date: monthName,
-          netProfit: Math.max(profitValue, Math.round(expenseValue * 1.15)),
-          expenses: expenseValue,
+          date: displayLabel,
+          netProfit,
+          expenses: monthExpense,
         })
       }
 
       return result
     }
 
-    // C. YEARLY RANGE: Past 5 years
-    const years = [2022, 2023, 2024, 2025, 2026]
-    return years.map((year, idx) => {
-      const yearSales = sales.filter((s) => s.date && s.date.startsWith(`${year}`))
-      let realYearProfit = 0
-      yearSales.forEach((s) => {
-        let cost = 0
-        s.items.forEach((item) => {
-          cost += (item.purchasePrice || item.price * 0.8) * (item.qty || 1)
-        })
-        realYearProfit += Math.max(0, s.totalAmount - cost)
+    // C. YEARLY RANGE: Past 5 years up to current year
+    if (activeTimeRange === "yearly") {
+      const now = new Date()
+      const currentYear = now.getFullYear()
+      const years = [
+        currentYear - 4,
+        currentYear - 3,
+        currentYear - 2,
+        currentYear - 1,
+        currentYear,
+      ]
+
+      return years.map((year) => {
+        const yearStr = year.toString()
+        const yearSales = sales.filter((s) => getSaleDateString(s).startsWith(yearStr))
+        const { netProfit } = calculateSaleStats(yearSales, stock)
+        const yearExpense = calculateYearlyExpense(expenses, yearStr)
+
+        return {
+          date: yearStr,
+          netProfit,
+          expenses: yearExpense,
+        }
       })
+    }
 
-      const yearExpenses = expenses.filter((e) => e.date && e.date.startsWith(`${year}`))
-      const realYearExpense =
-        yearExpenses.reduce((sum, e) => sum + e.amount, 0) +
-        (yearlyRecurring || 32000) +
-        (monthlyRecurring * 12 || 456000) +
-        (dailyRecurring * 365 || 198000)
+    // D. ALL-TIME: Historical years spanning recorded data
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const recordedYears = new Set<number>()
 
-      // Steady 5-year growth trajectory
-      const growthFactor = 0.55 + idx * 0.14
-      const estimatedProfit =
-        realYearProfit > 0
-          ? realYearProfit
-          : Math.round((totalSalesGrossProfit > 0 ? totalSalesGrossProfit * 10 : 540000) * growthFactor)
+    sales.forEach((s) => {
+      const ds = getSaleDateString(s)
+      if (ds.length >= 4) {
+        const y = parseInt(ds.slice(0, 4), 10)
+        if (!isNaN(y)) recordedYears.add(y)
+      }
+    })
+    expenses.forEach((e) => {
+      const ds = getExpenseDateString(e)
+      if (ds.length >= 4) {
+        const y = parseInt(ds.slice(0, 4), 10)
+        if (!isNaN(y)) recordedYears.add(y)
+      }
+    })
+    for (let y = currentYear - 4; y <= currentYear; y++) {
+      recordedYears.add(y)
+    }
 
-      const estimatedExpense =
-        realYearExpense > 0
-          ? realYearExpense
-          : Math.round((totalDirectExpenses > 0 ? totalDirectExpenses * 8 : 380000) * (0.6 + idx * 0.11))
+    const sortedYears = Array.from(recordedYears).sort((a, b) => a - b)
+    return sortedYears.map((year) => {
+      const yearStr = year.toString()
+      const yearSales = sales.filter((s) => getSaleDateString(s).startsWith(yearStr))
+      const { netProfit } = calculateSaleStats(yearSales, stock)
+      const yearExpense = calculateYearlyExpense(expenses, yearStr)
 
       return {
-        date: year.toString(),
-        netProfit: Math.round(estimatedProfit),
-        expenses: Math.round(estimatedExpense),
+        date: yearStr,
+        netProfit,
+        expenses: yearExpense,
       }
     })
   }, [activeTimeRange, sales, expenses, stock])
@@ -277,7 +218,7 @@ export function ChartAreaInteractive({
         return "Showing complete historical Expenses & Net Profit trajectory"
       case "monthly":
       default:
-        return "Showing monthly Expenses & Net Profit comparison for the last 10 months"
+        return "Showing monthly Expenses & Net Profit comparison for the last 12 months"
     }
   }, [activeTimeRange])
 
@@ -359,6 +300,7 @@ export function ChartAreaInteractive({
               width={38}
               stroke="#9ca3af"
               tick={{ fill: "#9ca3af", fontSize: 10 }}
+              domain={[0, (dataMax: number) => Math.max(dataMax || 0, 5000)]}
               tickFormatter={(val) => {
                 if (val >= 100000) return `₹${(val / 100000).toFixed(1)}L`
                 if (val >= 1000) return `₹${(val / 1000).toFixed(0)}k`
@@ -372,6 +314,7 @@ export function ChartAreaInteractive({
                 <ChartTooltipContent
                   indicator="dot"
                   labelFormatter={(val) => `${val}`}
+                  formatter={(val) => `₹${Number(val || 0).toLocaleString("en-IN")}`}
                 />
               }
             />
@@ -380,7 +323,7 @@ export function ChartAreaInteractive({
             <Area
               dataKey="expenses"
               name="Expenses"
-              type="natural"
+              type="monotone"
               fill="url(#fillExpenses)"
               stroke="#f87171"
               strokeWidth={2.5}
@@ -390,7 +333,7 @@ export function ChartAreaInteractive({
             <Area
               dataKey="netProfit"
               name="Net Profit"
-              type="natural"
+              type="monotone"
               fill="url(#fillNetProfit)"
               stroke="#e63946"
               strokeWidth={2.5}

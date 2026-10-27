@@ -82,6 +82,7 @@ export interface ChartTooltipContentProps {
   payload?: any[]
   label?: any
   labelFormatter?: (label: any, payload?: any[]) => React.ReactNode
+  formatter?: (value: any, name: any, item: any, index: number) => React.ReactNode
   indicator?: "dot" | "line" | "dashed"
   className?: string
 }
@@ -91,6 +92,7 @@ export function ChartTooltipContent({
   payload,
   label,
   labelFormatter,
+  formatter,
   indicator = "dot",
   className
 }: ChartTooltipContentProps) {
@@ -133,7 +135,11 @@ export function ChartTooltipContent({
                 <span>{labelText}</span>
               </div>
               <span className="font-bold text-white font-mono">
-                {typeof item.value === "number" ? item.value.toLocaleString("en-IN") : item.value}
+                {formatter
+                  ? formatter(item.value, labelText, item, index)
+                  : typeof item.value === "number"
+                  ? `₹${item.value.toLocaleString("en-IN")}`
+                  : item.value}
               </span>
             </div>
           )

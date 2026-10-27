@@ -9,45 +9,11 @@ import { subscribeToSales, type SaleRecord } from '../services/salesService'
 import { subscribeToStock, type StockItem } from '../services/stockService'
 import { subscribeToExpenses, type ExpenseRecord } from '../services/expenseService'
 import ChartAreaInteractive, { type ChartTimeRange } from '../components/ChartAreaInteractive'
+import { getSaleDateString, calculateSaleStats } from '../lib/financials'
 
 const COLORS = ['#e63946', '#457b9d', '#1d3557', '#a8dadc', '#e76f51', '#2a9d8f']
 
 export type TimeRange = ChartTimeRange
-
-// Helper to extract a normalized 'YYYY-MM-DD' string from a sale record
-function getSaleDateString(sale: SaleRecord): string {
-  if (sale.date && typeof sale.date === 'string') {
-    const trimmed = sale.date.trim()
-    if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
-      return trimmed.slice(0, 10)
-    }
-    const d = new Date(trimmed)
-    if (!isNaN(d.getTime())) {
-      const year = d.getFullYear()
-      const month = String(d.getMonth() + 1).padStart(2, '0')
-      const day = String(d.getDate()).padStart(2, '0')
-      return `${year}-${month}-${day}`
-    }
-  }
-  if (sale.createdAt) {
-    let d: Date | null = null
-    if (typeof sale.createdAt.toDate === 'function') {
-      d = sale.createdAt.toDate()
-    } else if (sale.createdAt.seconds) {
-      d = new Date(sale.createdAt.seconds * 1000)
-    } else {
-      const parsed = new Date(sale.createdAt)
-      if (!isNaN(parsed.getTime())) d = parsed
-    }
-    if (d) {
-      const year = d.getFullYear()
-      const month = String(d.getMonth() + 1).padStart(2, '0')
-      const day = String(d.getDate()).padStart(2, '0')
-      return `${year}-${month}-${day}`
-    }
-  }
-  return ''
-}
 
 export default function Dashboard() {
   const [timeRange, setTimeRange] = useState<TimeRange>('daily')
@@ -134,34 +100,8 @@ export default function Dashboard() {
       prevSales = []
     }
 
-    const calcStats = (salesList: SaleRecord[]) => {
-      const totalSalesAmount = salesList.reduce((acc, s) => acc + (s.totalAmount || 0), 0)
-      let totalCost = 0
-      let totalUnitsSold = 0
-
-      salesList.forEach((sale) => {
-        sale.items.forEach((item) => {
-          totalUnitsSold += item.qty || 1
-          const matchingStock = stock.find(
-            (st) => st.brand === item.brand && st.model === item.model
-          )
-          const costPrice =
-            item.purchasePrice || matchingStock?.purchasePrice || item.price * 0.8
-          totalCost += costPrice * (item.qty || 1)
-        })
-      })
-
-      const netProfit = Math.max(0, totalSalesAmount - totalCost)
-      return {
-        totalSalesAmount,
-        netProfit,
-        totalUnitsSold,
-        totalTransactions: salesList.length,
-      }
-    }
-
-    const currentStats = calcStats(currentSales)
-    const prevStats = calcStats(prevSales)
+    const currentStats = calculateSaleStats(currentSales, stock)
+    const prevStats = calculateSaleStats(prevSales, stock)
 
     const totalInventoryCount = stock.reduce((acc, item) => acc + item.qty, 0)
     const inventoryValuation = stock.reduce(
