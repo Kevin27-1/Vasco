@@ -69,6 +69,7 @@ export default function Sales() {
   // Form State
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
+  const [vehicleNumber, setVehicleNumber] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('UPI')
   const [saleDate, setSaleDate] = useState(new Intl.DateTimeFormat('en-CA').format(new Date()))
   const [saleItems, setSaleItems] = useState<{ stockId: string; qty: number; price: number | '' }[]>([
@@ -124,12 +125,14 @@ export default function Sales() {
 
   // Standard Sales Filter
   const filteredSales = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim()
     return sales.filter(
       (s) =>
-        s.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.customerPhone.includes(searchQuery) ||
-        s.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.items.some((item) => item.brand.toLowerCase().includes(searchQuery.toLowerCase()))
+        s.customerName.toLowerCase().includes(q) ||
+        s.customerPhone.includes(q) ||
+        (s.vehicleNumber || '').toLowerCase().includes(q) ||
+        s.invoiceNumber.toLowerCase().includes(q) ||
+        s.items.some((item) => item.brand.toLowerCase().includes(q))
     )
   }, [sales, searchQuery])
 
@@ -186,11 +189,13 @@ export default function Sales() {
 
   const filteredCreditSales = useMemo(() => {
     const today = new Intl.DateTimeFormat('en-CA').format(new Date())
+    const q = searchQuery.toLowerCase().trim()
     return creditSales.filter((s) => {
       const matchesSearch =
-        s.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.customerPhone.includes(searchQuery) ||
-        s.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase())
+        s.customerName.toLowerCase().includes(q) ||
+        s.customerPhone.includes(q) ||
+        (s.vehicleNumber || '').toLowerCase().includes(q) ||
+        s.invoiceNumber.toLowerCase().includes(q)
       if (!matchesSearch) return false
 
       const due = Number(s.remainingDue ?? Math.max(0, s.totalAmount - (s.amountPaidNow || 0)))
@@ -293,6 +298,7 @@ export default function Sales() {
       const created = await createSale({
         customerName,
         customerPhone,
+        vehicleNumber,
         date: saleDate,
         paymentMethod,
         items: itemsToSave,
@@ -310,6 +316,7 @@ export default function Sales() {
       // Reset form
       setCustomerName('')
       setCustomerPhone('')
+      setVehicleNumber('')
       setPaymentMethod('UPI')
       setSaleItems([{ stockId: '', qty: 1, price: '' }])
       setInterestType('percentage')
@@ -370,6 +377,7 @@ export default function Sales() {
   const closeModals = () => {
     setIsAddModalOpen(false)
     setCompletedSale(null)
+    setVehicleNumber('')
   }
 
   return (
@@ -602,7 +610,14 @@ export default function Sales() {
                         </td>
                         <td className="px-5 py-4">
                           <p className="font-semibold text-text-main">{sale.customerName}</p>
-                          <p className="text-xs text-text-muted">{sale.customerPhone || 'No phone'}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-xs text-text-muted">{sale.customerPhone || 'No phone'}</span>
+                            {sale.vehicleNumber && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-[#2a2a2a] text-amber-300 border border-white/5">
+                                {sale.vehicleNumber}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-5 py-4 text-text-muted text-xs">{sale.date}</td>
                         <td className="px-5 py-4">
@@ -671,6 +686,7 @@ export default function Sales() {
                                 <InvoicePDF
                                   customerName={sale.customerName}
                                   customerPhone={sale.customerPhone}
+                                  vehicleNumber={sale.vehicleNumber}
                                   invoiceNumber={sale.invoiceNumber}
                                   date={sale.date}
                                   paymentMethod={sale.paymentMethod}
@@ -774,7 +790,14 @@ export default function Sales() {
                         <td className="px-6 py-4 text-text-muted text-xs">{sale.date}</td>
                         <td className="px-6 py-4">
                           <p className="font-semibold text-text-main">{sale.customerName}</p>
-                          <p className="text-xs text-text-muted">{sale.customerPhone || 'No phone'}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-xs text-text-muted">{sale.customerPhone || 'No phone'}</span>
+                            {sale.vehicleNumber && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-[#2a2a2a] text-amber-300 border border-white/5">
+                                {sale.vehicleNumber}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           {isCredit ? (
@@ -833,6 +856,7 @@ export default function Sales() {
                                 <InvoicePDF
                                   customerName={sale.customerName}
                                   customerPhone={sale.customerPhone}
+                                  vehicleNumber={sale.vehicleNumber}
                                   invoiceNumber={sale.invoiceNumber}
                                   date={sale.date}
                                   paymentMethod={sale.paymentMethod}
@@ -1040,15 +1064,15 @@ export default function Sales() {
             </div>
 
             <form className="space-y-4" onSubmit={handleAddSale}>
-              {/* Customer info */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Customer & Vehicle info */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-text-muted mb-1">Customer Name *</label>
                   <input
                     type="text"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm"
+                    className="w-full bg-background border border-border rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-accent text-sm"
                     placeholder="e.g. Rahul Verma"
                     required
                   />
@@ -1059,9 +1083,22 @@ export default function Sales() {
                     type="tel"
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value)}
-                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm"
+                    className="w-full bg-background border border-border rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-accent text-sm"
                     placeholder="10-digit number"
                     required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-muted mb-1 flex items-center justify-between">
+                    <span>Vehicle / License Plate</span>
+                    <span className="text-[10px] text-text-muted font-normal">Optional</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={vehicleNumber}
+                    onChange={(e) => setVehicleNumber(e.target.value.toUpperCase())}
+                    className="w-full bg-background border border-border rounded-xl px-3.5 py-2.5 text-white font-mono uppercase focus:outline-none focus:border-accent text-sm"
+                    placeholder="e.g. KL 11 AV 4421"
                   />
                 </div>
               </div>
@@ -1391,6 +1428,11 @@ export default function Sales() {
             </h2>
             <p className="text-xs text-text-muted mb-4">
               Invoice #{completedSale.invoiceNumber} for {completedSale.customerName}
+              {completedSale.vehicleNumber ? (
+                <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-[#2a2a2a] text-amber-300 border border-white/5">
+                  {completedSale.vehicleNumber}
+                </span>
+              ) : null}
             </p>
 
             {completedSale.isCreditSale && (
@@ -1422,6 +1464,7 @@ export default function Sales() {
                   <InvoicePDF
                     customerName={completedSale.customerName}
                     customerPhone={completedSale.customerPhone}
+                    vehicleNumber={completedSale.vehicleNumber}
                     invoiceNumber={completedSale.invoiceNumber}
                     date={completedSale.date}
                     paymentMethod={completedSale.paymentMethod}

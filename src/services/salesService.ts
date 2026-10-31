@@ -35,6 +35,7 @@ export interface SaleRecord {
   invoiceNumber: string
   customerName: string
   customerPhone: string
+  vehicleNumber?: string // License plate / Vehicle reg number
   date: string
   items: SaleItemDetail[]
   totalAmount: number
@@ -91,6 +92,7 @@ export function subscribeToSales(
           invoiceNumber: data.invoiceNumber || docSnap.id.slice(0, 6).toUpperCase(),
           customerName: data.customerName || '',
           customerPhone: data.customerPhone || '',
+          vehicleNumber: data.vehicleNumber || data.licensePlate || '',
           date: data.date || '',
           items: data.items || [],
           totalAmount,
@@ -119,6 +121,7 @@ export function subscribeToSales(
 export interface CreateSaleParams {
   customerName: string
   customerPhone: string
+  vehicleNumber?: string
   date: string
   items: SaleItemDetail[]
   paymentMethod?: string
@@ -200,6 +203,7 @@ export async function createSale(params: CreateSaleParams): Promise<SaleRecord> 
       invoiceNumber,
       customerName: params.customerName.trim(),
       customerPhone: params.customerPhone.trim(),
+      vehicleNumber: (params.vehicleNumber || '').trim().toUpperCase(),
       date: params.date,
       items: params.items,
       totalAmount,
@@ -227,6 +231,7 @@ export async function createSale(params: CreateSaleParams): Promise<SaleRecord> 
     invoiceNumber,
     customerName: params.customerName,
     customerPhone: params.customerPhone,
+    vehicleNumber: (params.vehicleNumber || '').trim().toUpperCase(),
     date: params.date,
     items: params.items,
     totalAmount,

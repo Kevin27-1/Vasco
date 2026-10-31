@@ -108,11 +108,12 @@ export default function Settings() {
 
   const handleExportSalesCSV = () => {
     subscribeToSales((sales) => {
-      const headers = ['InvoiceNumber', 'CustomerName', 'Phone', 'Date', 'TotalAmount', 'PaymentMethod', 'ItemsCount']
+      const headers = ['InvoiceNumber', 'CustomerName', 'Phone', 'VehiclePlate', 'Date', 'TotalAmount', 'PaymentMethod', 'ItemsCount']
       const rows = sales.map(s => [
         `"${s.invoiceNumber}"`,
         `"${s.customerName}"`,
         `"${s.customerPhone}"`,
+        `"${s.vehicleNumber || ''}"`,
         `"${s.date}"`,
         s.totalAmount,
         `"${s.paymentMethod || 'Cash'}"`,

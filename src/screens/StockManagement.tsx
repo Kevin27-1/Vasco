@@ -31,6 +31,7 @@ export default function StockManagement() {
     sellingPrice: 0,
     customerName: 'Walk-in Customer',
     customerPhone: '',
+    vehicleNumber: '',
     paymentMethod: 'UPI',
     date: new Intl.DateTimeFormat('en-CA').format(new Date())
   })
@@ -144,6 +145,7 @@ export default function StockManagement() {
       sellingPrice: item.sellingPrice || 0,
       customerName: 'Walk-in Customer',
       customerPhone: '',
+      vehicleNumber: '',
       paymentMethod: 'UPI',
       date: new Intl.DateTimeFormat('en-CA').format(new Date())
     })
@@ -164,6 +166,7 @@ export default function StockManagement() {
       const created = await createSale({
         customerName: sellForm.customerName.trim() || 'Walk-in Customer',
         customerPhone: sellForm.customerPhone.trim(),
+        vehicleNumber: sellForm.vehicleNumber.trim(),
         date: sellForm.date,
         paymentMethod: sellForm.paymentMethod,
         items: [
@@ -754,8 +757,8 @@ export default function StockManagement() {
                 </div>
               </div>
 
-              {/* Customer Info */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Customer & Vehicle Info */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-text-muted mb-1">
                     Customer Name
@@ -764,7 +767,7 @@ export default function StockManagement() {
                     type="text"
                     value={sellForm.customerName}
                     onChange={(e) => setSellForm(f => ({ ...f, customerName: e.target.value }))}
-                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm"
+                    className="w-full bg-background border border-border rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-accent text-sm"
                     placeholder="e.g. Rahul Verma"
                   />
                 </div>
@@ -776,8 +779,20 @@ export default function StockManagement() {
                     type="tel"
                     value={sellForm.customerPhone}
                     onChange={(e) => setSellForm(f => ({ ...f, customerPhone: e.target.value }))}
-                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm"
+                    className="w-full bg-background border border-border rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-accent text-sm"
                     placeholder="e.g. 9876543210"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-muted mb-1">
+                    License Plate (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={sellForm.vehicleNumber}
+                    onChange={(e) => setSellForm(f => ({ ...f, vehicleNumber: e.target.value.toUpperCase() }))}
+                    className="w-full bg-background border border-border rounded-xl px-3.5 py-2.5 text-white font-mono uppercase focus:outline-none focus:border-accent text-sm"
+                    placeholder="e.g. KL 11 AV 4421"
                   />
                 </div>
               </div>
@@ -875,6 +890,7 @@ export default function StockManagement() {
                   <InvoicePDF
                     customerName={completedSale.customerName}
                     customerPhone={completedSale.customerPhone}
+                    vehicleNumber={completedSale.vehicleNumber}
                     invoiceNumber={completedSale.invoiceNumber}
                     date={completedSale.date}
                     items={completedSale.items}

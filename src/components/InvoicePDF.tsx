@@ -143,6 +143,7 @@ interface InvoiceProps {
   invoiceNumber?: string
   customerName: string
   customerPhone: string
+  vehicleNumber?: string
   date: string
   paymentMethod?: string
   isCreditSale?: boolean
@@ -165,6 +166,7 @@ export const InvoicePDF = ({
   invoiceNumber,
   customerName,
   customerPhone,
+  vehicleNumber,
   date,
   paymentMethod,
   isCreditSale,
@@ -232,6 +234,11 @@ export const InvoicePDF = ({
             <View style={[styles.headerLeft, styles.borderRight, styles.borderBottom]}>
               <Text style={styles.text}>To</Text>
               <Text style={[styles.boldText, { marginLeft: 20 }]}>M/S {customerName}</Text>
+              {vehicleNumber ? (
+                <Text style={[styles.boldText, { marginLeft: 20, marginTop: 3, color: '#222222' }]}>
+                  Vehicle No: {vehicleNumber}
+                </Text>
+              ) : null}
             </View>
             <View style={[styles.headerRight, styles.borderBottom]}>
               <View style={[styles.borderBottom, { padding: 4 }]}>
@@ -245,7 +252,9 @@ export const InvoicePDF = ({
                 </View>
                 <View style={styles.row}>
                   <Text style={[styles.text, { width: '50%' }]}>Ph : {customerPhone}</Text>
-                  <Text style={[styles.text, { width: '50%' }]}>Date :</Text>
+                  <Text style={[styles.text, { width: '50%' }]}>
+                    {vehicleNumber ? `Veh: ${vehicleNumber}` : 'Date :'}
+                  </Text>
                 </View>
               </View>
             </View>

@@ -151,7 +151,7 @@ export default function Topbar({ onOpenMobileMenu, onNavigate, onLogout }: Topba
         id: `sale-${s.id}`,
         type: 'sale',
         title: `Sale: #${s.invoiceNumber}`,
-        desc: `${s.customerName || 'Customer'} purchased tyre(s) • ₹${s.totalAmount.toLocaleString('en-IN')}`,
+        desc: `${s.customerName || 'Customer'}${s.vehicleNumber ? ` (${s.vehicleNumber})` : ''} purchased tyre(s) • ₹${s.totalAmount.toLocaleString('en-IN')}`,
         time: s.date || 'Recent',
         targetScreen: 'sales'
       })
