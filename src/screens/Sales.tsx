@@ -76,7 +76,8 @@ export default function Sales() {
   ])
 
   // Credit Specific Form State
-  const [interestRate, setInterestRate] = useState<number | ''>(0)
+  const [interestType, setInterestType] = useState<'percentage' | 'fixed'>('percentage')
+  const [interestValue, setInterestValue] = useState<number | ''>(0)
   const [amountPaidNow, setAmountPaidNow] = useState<number | ''>(0)
   const [dueDate, setDueDate] = useState<string>(() => getDefaultDueDate(30))
 
@@ -214,9 +215,35 @@ export default function Sales() {
 
   const modalInterestAmount = useMemo(() => {
     if (paymentMethod !== 'Credit') return 0
-    const rate = Number(interestRate) || 0
+    if (interestType === 'fixed') {
+      return Number(interestValue) || 0
+    }
+    const rate = Number(interestValue) || 0
     return Math.round((modalItemsSubtotal * rate) / 100)
-  }, [paymentMethod, interestRate, modalItemsSubtotal])
+  }, [paymentMethod, interestType, interestValue, modalItemsSubtotal])
+
+  const modalInterestRate = useMemo(() => {
+    if (paymentMethod !== 'Credit') return 0
+    if (interestType === 'percentage') {
+      return Number(interestValue) || 0
+    }
+    const amt = Number(interestValue) || 0
+    return modalItemsSubtotal > 0 ? Number(((amt / modalItemsSubtotal) * 100).toFixed(1)) : 0
+  }, [paymentMethod, interestType, interestValue, modalItemsSubtotal])
+
+  const handleToggleInterestType = (newType: 'percentage' | 'fixed') => {
+    if (newType === interestType) return
+    setInterestType(newType)
+    if (newType === 'fixed') {
+      const rate = Number(interestValue) || 0
+      const amt = Math.round((modalItemsSubtotal * rate) / 100)
+      setInterestValue(amt > 0 ? amt : '')
+    } else {
+      const amt = Number(interestValue) || 0
+      const pct = modalItemsSubtotal > 0 ? Number(((amt / modalItemsSubtotal) * 100).toFixed(1)) : 0
+      setInterestValue(pct > 0 ? pct : '')
+    }
+  }
 
   const modalTotalPayable = modalItemsSubtotal + modalInterestAmount
   const modalPaidNow = paymentMethod === 'Credit' ? Number(amountPaidNow) || 0 : modalTotalPayable
@@ -270,7 +297,8 @@ export default function Sales() {
         paymentMethod,
         items: itemsToSave,
         isCreditSale: paymentMethod === 'Credit',
-        interestRate: paymentMethod === 'Credit' ? Number(interestRate) || 0 : 0,
+        interestType: paymentMethod === 'Credit' ? interestType : 'percentage',
+        interestRate: paymentMethod === 'Credit' ? modalInterestRate : 0,
         interestAmount: modalInterestAmount,
         amountPaidNow: modalPaidNow,
         remainingDue: modalRemainingDue,
@@ -284,7 +312,8 @@ export default function Sales() {
       setCustomerPhone('')
       setPaymentMethod('UPI')
       setSaleItems([{ stockId: '', qty: 1, price: '' }])
-      setInterestRate(0)
+      setInterestType('percentage')
+      setInterestValue(0)
       setAmountPaidNow(0)
       setDueDate(getDefaultDueDate(30))
     } catch (err: any) {
@@ -578,12 +607,12 @@ export default function Sales() {
                         <td className="px-5 py-4 text-text-muted text-xs">{sale.date}</td>
                         <td className="px-5 py-4">
                           <div className="font-semibold text-white">₹{sale.totalAmount.toLocaleString('en-IN')}</div>
-                          {sale.interestRate ? (
+                          {sale.interestAmount ? (
                             <span className="text-[10px] text-amber-400 font-mono">
-                              +{sale.interestRate}% interest (+₹{sale.interestAmount?.toLocaleString('en-IN')})
+                              +₹{sale.interestAmount.toLocaleString('en-IN')} ({sale.interestRate}%)
                             </span>
                           ) : (
-                            <span className="text-[10px] text-text-muted">0% interest</span>
+                            <span className="text-[10px] text-text-muted">No interest</span>
                           )}
                         </td>
                         <td className="px-5 py-4 font-semibold text-emerald-400">
@@ -1074,25 +1103,62 @@ export default function Sales() {
                   </div>
 
                   <div className="grid grid-cols-3 gap-3">
-                    {/* Interest (%) */}
+                    {/* Interest (% or ₹) */}
                     <div>
-                      <label className="block text-[11px] font-medium text-text-muted mb-1">Interest (%)</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[11px] font-medium text-text-muted">
+                          Interest {interestType === 'percentage' ? '(%)' : '(₹)'}
+                        </label>
+                        <div className="flex items-center rounded-lg bg-background border border-border p-0.5">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleInterestType('percentage')}
+                            className={`px-1.5 py-0.5 text-[10px] font-bold rounded-md transition-colors ${
+                              interestType === 'percentage'
+                                ? 'bg-amber-500 text-black shadow-sm'
+                                : 'text-text-muted hover:text-white'
+                            }`}
+                          >
+                            %
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleInterestType('fixed')}
+                            className={`px-1.5 py-0.5 text-[10px] font-bold rounded-md transition-colors ${
+                              interestType === 'fixed'
+                                ? 'bg-amber-500 text-black shadow-sm'
+                                : 'text-text-muted hover:text-white'
+                            }`}
+                          >
+                            ₹
+                          </button>
+                        </div>
+                      </div>
                       <div className="relative">
+                        {interestType === 'fixed' && (
+                          <span className="absolute left-2.5 top-2 text-xs text-text-muted">₹</span>
+                        )}
                         <input
                           type="number"
                           min="0"
-                          step="0.5"
+                          step={interestType === 'percentage' ? '0.5' : 'any'}
                           placeholder="0"
-                          value={interestRate}
+                          value={interestValue}
                           onChange={(e) =>
-                            setInterestRate(e.target.value === '' ? '' : Math.max(0, parseFloat(e.target.value) || 0))
+                            setInterestValue(e.target.value === '' ? '' : Math.max(0, parseFloat(e.target.value) || 0))
                           }
-                          className="w-full bg-background border border-border rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400 text-xs font-semibold"
+                          className={`w-full bg-background border border-border rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400 text-xs font-semibold ${
+                            interestType === 'fixed' ? 'pl-6 pr-2' : 'pr-6'
+                          }`}
                         />
-                        <span className="absolute right-2.5 top-2 text-xs text-text-muted">%</span>
+                        {interestType === 'percentage' && (
+                          <span className="absolute right-2.5 top-2 text-xs text-text-muted">%</span>
+                        )}
                       </div>
                       <span className="text-[10px] text-amber-400/90 mt-1 block">
-                        +{modalInterestAmount > 0 ? `₹${modalInterestAmount.toLocaleString('en-IN')}` : '₹0'} int.
+                        {interestType === 'percentage'
+                          ? `+₹${modalInterestAmount.toLocaleString('en-IN')} interest`
+                          : `≈ ${modalInterestRate}% of subtotal`}
                       </span>
                     </div>
 

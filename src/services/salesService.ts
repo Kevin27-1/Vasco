@@ -42,6 +42,7 @@ export interface SaleRecord {
   createdAt?: any
   // Credit sales fields
   isCreditSale?: boolean
+  interestType?: 'percentage' | 'fixed'
   interestRate?: number // e.g. 5%
   interestAmount?: number // in ₹
   amountPaidNow?: number // Down payment paid at purchase
@@ -96,6 +97,7 @@ export function subscribeToSales(
           paymentMethod: data.paymentMethod || 'Cash',
           createdAt: data.createdAt,
           isCreditSale,
+          interestType: (data.interestType as 'percentage' | 'fixed') || 'percentage',
           interestRate: Number(data.interestRate) || 0,
           interestAmount: Number(data.interestAmount) || 0,
           amountPaidNow,
@@ -122,6 +124,7 @@ export interface CreateSaleParams {
   paymentMethod?: string
   // Credit fields
   isCreditSale?: boolean
+  interestType?: 'percentage' | 'fixed'
   interestRate?: number
   interestAmount?: number
   amountPaidNow?: number
@@ -133,10 +136,20 @@ export interface CreateSaleParams {
 export async function createSale(params: CreateSaleParams): Promise<SaleRecord> {
   const itemsSubtotal = params.items.reduce((sum, item) => sum + item.price * item.qty, 0)
   const isCredit = params.paymentMethod === 'Credit' || !!params.isCreditSale
-  const interestRate = isCredit ? Number(params.interestRate || 0) : 0
-  const interestAmount = isCredit
-    ? (params.interestAmount !== undefined ? Number(params.interestAmount) : Math.round((itemsSubtotal * interestRate) / 100))
-    : 0
+  const interestType = params.interestType || 'percentage'
+  let interestRate = 0
+  let interestAmount = 0
+
+  if (isCredit) {
+    if (interestType === 'fixed') {
+      interestAmount = params.interestAmount !== undefined ? Number(params.interestAmount) : 0
+      interestRate = itemsSubtotal > 0 ? Number(((interestAmount / itemsSubtotal) * 100).toFixed(2)) : 0
+    } else {
+      interestRate = Number(params.interestRate || 0)
+      interestAmount = params.interestAmount !== undefined ? Number(params.interestAmount) : Math.round((itemsSubtotal * interestRate) / 100)
+    }
+  }
+
   const totalAmount = itemsSubtotal + interestAmount
   const amountPaidNow = isCredit ? Number(params.amountPaidNow || 0) : totalAmount
   const remainingDue = isCredit ? Math.max(0, totalAmount - amountPaidNow) : 0
@@ -196,6 +209,7 @@ export async function createSale(params: CreateSaleParams): Promise<SaleRecord> 
 
     if (isCredit) {
       salePayload.isCreditSale = true
+      salePayload.interestType = interestType
       salePayload.interestRate = interestRate
       salePayload.interestAmount = interestAmount
       salePayload.amountPaidNow = amountPaidNow
@@ -218,6 +232,7 @@ export async function createSale(params: CreateSaleParams): Promise<SaleRecord> 
     totalAmount,
     paymentMethod: params.paymentMethod || 'Cash',
     isCreditSale: isCredit,
+    interestType,
     interestRate,
     interestAmount,
     amountPaidNow,
