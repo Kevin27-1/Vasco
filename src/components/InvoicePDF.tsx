@@ -144,6 +144,13 @@ interface InvoiceProps {
   customerName: string
   customerPhone: string
   date: string
+  paymentMethod?: string
+  isCreditSale?: boolean
+  interestRate?: number
+  interestAmount?: number
+  amountPaidNow?: number
+  remainingDue?: number
+  dueDate?: string
   items: {
     brand: string
     model: string
@@ -153,10 +160,27 @@ interface InvoiceProps {
   }[]
 }
 
-export const InvoicePDF = ({ id, invoiceNumber, customerName, customerPhone, date, items }: InvoiceProps) => {
+export const InvoicePDF = ({
+  id,
+  invoiceNumber,
+  customerName,
+  customerPhone,
+  date,
+  paymentMethod,
+  isCreditSale,
+  interestRate = 0,
+  interestAmount = 0,
+  amountPaidNow,
+  remainingDue,
+  dueDate,
+  items
+}: InvoiceProps) => {
   const displayId = invoiceNumber || id || '1001';
-  const totalWithTax = items.reduce((acc, curr) => acc + (curr.qty * curr.price), 0);
-  const taxableValue = totalWithTax / 1.18;
+  const goodsSubtotal = items.reduce((acc, curr) => acc + (curr.qty * curr.price), 0);
+  const isCredit = isCreditSale || paymentMethod === 'Credit';
+  const calculatedInterest = isCredit ? (interestAmount || Math.round((goodsSubtotal * interestRate) / 100)) : 0;
+  const totalWithTax = goodsSubtotal + calculatedInterest;
+  const taxableValue = goodsSubtotal / 1.18;
   const cgst = taxableValue * 0.09;
   const sgst = taxableValue * 0.09;
   
@@ -274,6 +298,16 @@ export const InvoicePDF = ({ id, invoiceNumber, customerName, customerPhone, dat
               <View style={styles.wordsContainer}>
                 <Text style={styles.text}>Rupees in words:</Text>
                 <Text style={[styles.boldText, { marginTop: 4 }]}>{words}</Text>
+                {isCredit && (
+                  <View style={{ marginTop: 4, paddingTop: 3, borderTop: '0.5pt dashed #888' }}>
+                    <Text style={[styles.boldText, { color: '#d62828', fontSize: 8 }]}>
+                      PAYMENT MODE: CREDIT / DUE
+                    </Text>
+                    <Text style={[styles.text, { fontSize: 8, marginTop: 1 }]}>
+                      Paid Today: ₹{(amountPaidNow || 0).toLocaleString('en-IN')} | Remaining Balance: ₹{(remainingDue ?? Math.max(0, totalAmountRounded - (amountPaidNow || 0))).toLocaleString('en-IN')}{dueDate ? ` | Due Date: ${dueDate}` : ''}
+                    </Text>
+                  </View>
+                )}
               </View>
               <View style={styles.signContainer}>
                 <View>

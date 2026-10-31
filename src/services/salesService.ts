@@ -23,6 +23,13 @@ export interface SaleItemDetail {
   purchasePrice?: number
 }
 
+export interface CreditPaymentRecord {
+  date: string
+  amount: number
+  paymentMethod?: string
+  notes?: string
+}
+
 export interface SaleRecord {
   id: string
   invoiceNumber: string
@@ -33,6 +40,15 @@ export interface SaleRecord {
   totalAmount: number
   paymentMethod?: string
   createdAt?: any
+  // Credit sales fields
+  isCreditSale?: boolean
+  interestRate?: number // e.g. 5%
+  interestAmount?: number // in ₹
+  amountPaidNow?: number // Down payment paid at purchase
+  remainingDue?: number // Balance due
+  dueDate?: string // YYYY-MM-DD
+  creditStatus?: 'Pending' | 'Partially Paid' | 'Paid' | 'Overdue'
+  paymentHistory?: CreditPaymentRecord[]
 }
 
 const SALES_COLLECTION = 'sales'
@@ -48,8 +64,27 @@ export function subscribeToSales(
   return onSnapshot(
     q,
     (snapshot) => {
+      const todayStr = new Intl.DateTimeFormat('en-CA').format(new Date())
       const sales: SaleRecord[] = snapshot.docs.map((docSnap) => {
         const data = docSnap.data()
+        const totalAmount = Number(data.totalAmount) || 0
+        const isCreditSale = data.paymentMethod === 'Credit' || !!data.isCreditSale
+        const amountPaidNow = Number(data.amountPaidNow ?? (isCreditSale ? 0 : totalAmount)) || 0
+        const remainingDue = Number(data.remainingDue ?? (isCreditSale ? Math.max(0, totalAmount - amountPaidNow) : 0))
+        
+        let creditStatus: 'Pending' | 'Partially Paid' | 'Paid' | 'Overdue' | undefined = data.creditStatus
+        if (isCreditSale) {
+          if (remainingDue <= 0) {
+            creditStatus = 'Paid'
+          } else if (data.dueDate && data.dueDate < todayStr) {
+            creditStatus = 'Overdue'
+          } else if (amountPaidNow > 0) {
+            creditStatus = 'Partially Paid'
+          } else {
+            creditStatus = 'Pending'
+          }
+        }
+
         return {
           id: docSnap.id,
           invoiceNumber: data.invoiceNumber || docSnap.id.slice(0, 6).toUpperCase(),
@@ -57,9 +92,17 @@ export function subscribeToSales(
           customerPhone: data.customerPhone || '',
           date: data.date || '',
           items: data.items || [],
-          totalAmount: Number(data.totalAmount) || 0,
+          totalAmount,
           paymentMethod: data.paymentMethod || 'Cash',
-          createdAt: data.createdAt
+          createdAt: data.createdAt,
+          isCreditSale,
+          interestRate: Number(data.interestRate) || 0,
+          interestAmount: Number(data.interestAmount) || 0,
+          amountPaidNow,
+          remainingDue,
+          dueDate: data.dueDate || '',
+          creditStatus,
+          paymentHistory: Array.isArray(data.paymentHistory) ? data.paymentHistory : []
         }
       })
       onData(sales)
@@ -71,14 +114,41 @@ export function subscribeToSales(
   )
 }
 
-export async function createSale(params: {
+export interface CreateSaleParams {
   customerName: string
   customerPhone: string
   date: string
   items: SaleItemDetail[]
   paymentMethod?: string
-}): Promise<SaleRecord> {
-  const totalAmount = params.items.reduce((sum, item) => sum + item.price * item.qty, 0)
+  // Credit fields
+  isCreditSale?: boolean
+  interestRate?: number
+  interestAmount?: number
+  amountPaidNow?: number
+  remainingDue?: number
+  dueDate?: string
+  creditStatus?: 'Pending' | 'Partially Paid' | 'Paid' | 'Overdue'
+}
+
+export async function createSale(params: CreateSaleParams): Promise<SaleRecord> {
+  const itemsSubtotal = params.items.reduce((sum, item) => sum + item.price * item.qty, 0)
+  const isCredit = params.paymentMethod === 'Credit' || !!params.isCreditSale
+  const interestRate = isCredit ? Number(params.interestRate || 0) : 0
+  const interestAmount = isCredit
+    ? (params.interestAmount !== undefined ? Number(params.interestAmount) : Math.round((itemsSubtotal * interestRate) / 100))
+    : 0
+  const totalAmount = itemsSubtotal + interestAmount
+  const amountPaidNow = isCredit ? Number(params.amountPaidNow || 0) : totalAmount
+  const remainingDue = isCredit ? Math.max(0, totalAmount - amountPaidNow) : 0
+  const dueDate = isCredit ? (params.dueDate || '') : ''
+  const creditStatus: 'Pending' | 'Partially Paid' | 'Paid' | 'Overdue' | undefined = isCredit
+    ? (remainingDue <= 0 ? 'Paid' : amountPaidNow > 0 ? 'Partially Paid' : 'Pending')
+    : undefined
+
+  const initialHistory: CreditPaymentRecord[] = isCredit && amountPaidNow > 0
+    ? [{ date: params.date, amount: amountPaidNow, paymentMethod: 'Initial Down Payment', notes: 'Paid at purchase' }]
+    : []
+
   const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`
 
   // Use a Firestore transaction to update stock counts safely
@@ -113,7 +183,7 @@ export async function createSale(params: {
     // 2. Add the sale record
     const salesRef = collection(db, SALES_COLLECTION)
     const newSaleDocRef = doc(salesRef)
-    transaction.set(newSaleDocRef, {
+    const salePayload: Record<string, any> = {
       invoiceNumber,
       customerName: params.customerName.trim(),
       customerPhone: params.customerPhone.trim(),
@@ -122,7 +192,20 @@ export async function createSale(params: {
       totalAmount,
       paymentMethod: params.paymentMethod || 'Cash',
       createdAt: serverTimestamp()
-    })
+    }
+
+    if (isCredit) {
+      salePayload.isCreditSale = true
+      salePayload.interestRate = interestRate
+      salePayload.interestAmount = interestAmount
+      salePayload.amountPaidNow = amountPaidNow
+      salePayload.remainingDue = remainingDue
+      salePayload.dueDate = dueDate
+      salePayload.creditStatus = creditStatus
+      salePayload.paymentHistory = initialHistory
+    }
+
+    transaction.set(newSaleDocRef, salePayload)
   })
 
   return {
@@ -133,8 +216,49 @@ export async function createSale(params: {
     date: params.date,
     items: params.items,
     totalAmount,
-    paymentMethod: params.paymentMethod || 'Cash'
+    paymentMethod: params.paymentMethod || 'Cash',
+    isCreditSale: isCredit,
+    interestRate,
+    interestAmount,
+    amountPaidNow,
+    remainingDue,
+    dueDate,
+    creditStatus,
+    paymentHistory: initialHistory
   }
+}
+
+export async function recordCreditPayment(
+  saleId: string,
+  amount: number,
+  paymentMethod: string = 'Cash',
+  notes?: string
+): Promise<void> {
+  const saleDocRef = doc(db, SALES_COLLECTION, saleId)
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(saleDocRef)
+    if (!snap.exists()) throw new Error('Invoice record not found')
+    const data = snap.data()
+    const currentPaid = Number(data.amountPaidNow) || 0
+    const total = Number(data.totalAmount) || 0
+    const newPaid = currentPaid + amount
+    const newRemaining = Math.max(0, total - newPaid)
+    const newStatus = newRemaining === 0 ? 'Paid' : 'Partially Paid'
+    const newHistory = Array.isArray(data.paymentHistory) ? [...data.paymentHistory] : []
+    newHistory.push({
+      date: new Intl.DateTimeFormat('en-CA').format(new Date()),
+      amount,
+      paymentMethod,
+      notes: notes || 'Credit Installment Payment'
+    })
+
+    transaction.update(saleDocRef, {
+      amountPaidNow: newPaid,
+      remainingDue: newRemaining,
+      creditStatus: newStatus,
+      paymentHistory: newHistory
+    })
+  })
 }
 
 export async function deleteSale(id: string) {
