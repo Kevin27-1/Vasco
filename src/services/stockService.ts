@@ -22,7 +22,7 @@ export interface StockItem {
   size: string
   qty: number
   purchasePrice: number
-  sellingPrice: number
+  sellingPrice?: number
   status: StockStatus
   minStockLevel?: number
   lastUpdated: string
@@ -85,18 +85,21 @@ export async function addStockItem(item: Omit<StockItem, 'id' | 'status'> & { mi
   }).format(new Date())
 
   const stockRef = collection(db, STOCK_COLLECTION)
-  const docRef = await addDoc(stockRef, {
+  const docPayload: Record<string, any> = {
     brand: item.brand.trim(),
     model: item.model.trim(),
     size: item.size.trim(),
     qty: Number(item.qty),
     purchasePrice: Number(item.purchasePrice),
-    sellingPrice: Number(item.sellingPrice),
     minStockLevel: minStock,
     status,
     lastUpdated: now,
     createdAt: serverTimestamp()
-  })
+  }
+  if (item.sellingPrice !== undefined) {
+    docPayload.sellingPrice = Number(item.sellingPrice)
+  }
+  const docRef = await addDoc(stockRef, docPayload)
 
   return docRef.id
 }

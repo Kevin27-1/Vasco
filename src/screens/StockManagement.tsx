@@ -43,7 +43,6 @@ export default function StockManagement() {
     size: '',
     qty: 1,
     purchasePrice: 0,
-    sellingPrice: 0,
     minStockLevel: 2
   })
 
@@ -95,7 +94,6 @@ export default function StockManagement() {
         size: formData.size,
         qty: Number(formData.qty),
         purchasePrice: Number(formData.purchasePrice),
-        sellingPrice: Number(formData.sellingPrice),
         minStockLevel: Number(formData.minStockLevel),
         lastUpdated: 'Just now'
       })
@@ -106,7 +104,6 @@ export default function StockManagement() {
         size: '',
         qty: 1,
         purchasePrice: 0,
-        sellingPrice: 0,
         minStockLevel: 2
       })
     } catch (err: any) {
@@ -129,7 +126,6 @@ export default function StockManagement() {
         size: editingItem.size,
         qty: Number(editingItem.qty),
         purchasePrice: Number(editingItem.purchasePrice),
-        sellingPrice: Number(editingItem.sellingPrice),
         minStockLevel: Number(editingItem.minStockLevel || 2)
       })
       setEditingItem(null)
@@ -145,7 +141,7 @@ export default function StockManagement() {
     setSellingItem(item)
     setSellForm({
       qty: item.qty, // Default to all remaining units so it sells out by selling
-      sellingPrice: item.sellingPrice,
+      sellingPrice: item.sellingPrice || 0,
       customerName: 'Walk-in Customer',
       customerPhone: '',
       paymentMethod: 'UPI',
@@ -288,7 +284,6 @@ export default function StockManagement() {
                 <th className="px-6 py-4 font-medium text-text-muted">Size</th>
                 <th className="px-6 py-4 font-medium text-text-muted">Qty</th>
                 <th className="px-6 py-4 font-medium text-text-muted">Purchase (₹)</th>
-                <th className="px-6 py-4 font-medium text-text-muted">Selling (₹)</th>
                 <th className="px-6 py-4 font-medium text-text-muted">Status</th>
                 <th className="px-6 py-4 font-medium text-text-muted">Last Updated</th>
                 <th className="px-6 py-4 font-medium text-text-muted text-right">Actions</th>
@@ -297,7 +292,7 @@ export default function StockManagement() {
             <tbody className="divide-y divide-border">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-text-muted">
+                  <td colSpan={7} className="px-6 py-12 text-center text-text-muted">
                     <div className="flex items-center justify-center gap-2">
                       <RefreshCw className="w-5 h-5 animate-spin text-accent" />
                       <span>Loading inventory from Firebase...</span>
@@ -320,7 +315,6 @@ export default function StockManagement() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-text-main">₹{item.purchasePrice.toLocaleString('en-IN')}</td>
-                  <td className="px-6 py-4 text-text-main font-semibold">₹{item.sellingPrice.toLocaleString('en-IN')}</td>
                   <td className="px-6 py-4">
                     <StatusBadge status={item.status} />
                   </td>
@@ -366,7 +360,7 @@ export default function StockManagement() {
               
               {!loading && filteredStock.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-text-muted">
+                  <td colSpan={7} className="px-6 py-12 text-center text-text-muted">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <Database className="w-10 h-10 text-text-muted opacity-40" />
                       <p>No tyre items found in Firestore database.</p>
@@ -440,7 +434,7 @@ export default function StockManagement() {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-text-muted mb-1">Quantity *</label>
                   <input 
@@ -459,18 +453,6 @@ export default function StockManagement() {
                     min="0" 
                     value={formData.purchasePrice || ''}
                     onChange={(e) => setFormData({ ...formData, purchasePrice: Math.max(0, parseFloat(e.target.value) || 0) })}
-                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm" 
-                    placeholder="0.00" 
-                    required 
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-text-muted mb-1">Selling Price (₹) *</label>
-                  <input 
-                    type="number" 
-                    min="0" 
-                    value={formData.sellingPrice || ''}
-                    onChange={(e) => setFormData({ ...formData, sellingPrice: Math.max(0, parseFloat(e.target.value) || 0) })}
                     className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm" 
                     placeholder="0.00" 
                     required 
@@ -570,7 +552,7 @@ export default function StockManagement() {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-text-muted mb-1">Quantity</label>
                   <input 
@@ -589,17 +571,6 @@ export default function StockManagement() {
                     min="0" 
                     value={editingItem.purchasePrice}
                     onChange={(e) => setEditingItem({ ...editingItem, purchasePrice: Math.max(0, parseFloat(e.target.value) || 0) })}
-                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm" 
-                    required 
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-text-muted mb-1">Selling (₹)</label>
-                  <input 
-                    type="number" 
-                    min="0" 
-                    value={editingItem.sellingPrice}
-                    onChange={(e) => setEditingItem({ ...editingItem, sellingPrice: Math.max(0, parseFloat(e.target.value) || 0) })}
                     className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm" 
                     required 
                   />

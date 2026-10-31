@@ -86,14 +86,13 @@ export default function Settings() {
 
   const handleExportStockCSV = () => {
     subscribeToStock((items) => {
-      const headers = ['Brand', 'Model', 'Size', 'Qty', 'PurchasePrice', 'SellingPrice', 'Status']
+      const headers = ['Brand', 'Model', 'Size', 'Qty', 'PurchasePrice', 'Status']
       const rows = items.map(i => [
         `"${i.brand}"`,
         `"${i.model}"`,
         `"${i.size}"`,
         i.qty,
         i.purchasePrice,
-        i.sellingPrice,
         `"${i.status}"`
       ])
       const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n')

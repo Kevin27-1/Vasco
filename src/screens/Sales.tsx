@@ -26,7 +26,7 @@ export default function Sales() {
   const [customerPhone, setCustomerPhone] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('UPI')
   const [saleDate, setSaleDate] = useState(new Intl.DateTimeFormat('en-CA').format(new Date()))
-  const [saleItems, setSaleItems] = useState<{ stockId: string; qty: number }[]>([{ stockId: '', qty: 1 }])
+  const [saleItems, setSaleItems] = useState<{ stockId: string; qty: number; price: number | '' }[]>([{ stockId: '', qty: 1, price: '' }])
 
   // PDF Generation State for newly completed sale
   const [completedSale, setCompletedSale] = useState<SaleRecord | null>(null)
@@ -81,13 +81,14 @@ export default function Sales() {
         .map((si) => {
           const stockItem = availableStock.find((s) => s.id === si.stockId)
           if (!stockItem) return null
+          const unitPrice = typeof si.price === 'number' ? si.price : parseFloat(String(si.price)) || 0
           return {
             stockId: stockItem.id,
             brand: stockItem.brand,
             model: stockItem.model,
             size: stockItem.size,
             qty: si.qty,
-            price: stockItem.sellingPrice,
+            price: unitPrice,
             purchasePrice: stockItem.purchasePrice
           }
         })
@@ -95,6 +96,12 @@ export default function Sales() {
 
       if (itemsToSave.length === 0) {
         setErrorMessage('Please select at least one valid tyre product from available stock.')
+        setIsSubmitting(false)
+        return
+      }
+
+      if (itemsToSave.some(item => item.price <= 0)) {
+        setErrorMessage('Please enter a valid selling price greater than 0 for each tyre item.')
         setIsSubmitting(false)
         return
       }
@@ -113,7 +120,7 @@ export default function Sales() {
       setCustomerName('')
       setCustomerPhone('')
       setPaymentMethod('UPI')
-      setSaleItems([{ stockId: '', qty: 1 }])
+      setSaleItems([{ stockId: '', qty: 1, price: '' }])
     } catch (err: any) {
       console.error('Failed to create sale:', err)
       setErrorMessage(err.message || 'Failed to complete sale transaction in Firebase.')
@@ -294,7 +301,7 @@ export default function Sales() {
       {/* Add Sale Modal */}
       {isAddModalOpen && !completedSale && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-card w-full max-w-lg rounded-2xl border border-border shadow-2xl p-6">
+          <div className="bg-card w-full max-w-xl rounded-2xl border border-border shadow-2xl p-6">
             <div className="flex justify-between items-center mb-6">
               <div>
                 <h2 className="text-xl font-bold text-white">Create New Sale</h2>
@@ -362,60 +369,96 @@ export default function Sales() {
                   <label className="block text-xs font-medium text-text-muted">Tyre Products (From Stock)</label>
                   <button 
                     type="button" 
-                    onClick={() => setSaleItems([...saleItems, { stockId: '', qty: 1 }])} 
+                    onClick={() => setSaleItems([...saleItems, { stockId: '', qty: 1, price: '' }])} 
                     className="text-xs font-semibold text-accent hover:text-accent-hover flex items-center gap-1"
                   >
                     <Plus className="w-3 h-3"/> Add Item
                   </button>
                 </div>
+
+                <div className="grid grid-cols-12 gap-2 text-[11px] text-text-muted font-medium px-1">
+                  <div className="col-span-6">Product</div>
+                  <div className="col-span-2 text-center">Qty</div>
+                  <div className="col-span-3">Selling Price (₹)</div>
+                  <div className="col-span-1"></div>
+                </div>
                 
                 {saleItems.map((item, index) => {
                   const selectedStock = availableStock.find(s => s.id === item.stockId)
                   return (
-                    <div key={index} className="flex gap-3 items-center">
-                      <select 
-                        value={item.stockId} 
-                        onChange={e => {
-                          const newItems = [...saleItems]
-                          newItems[index].stockId = e.target.value
-                          setSaleItems(newItems)
-                        }}
-                        className="flex-1 bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent appearance-none text-xs" 
-                        required
-                      >
-                        <option value="" disabled>Select tyre from stock...</option>
-                        {availableStock.map(stock => (
-                          <option key={stock.id} value={stock.id}>
-                            {stock.brand} {stock.model} ({stock.size}) - ₹{stock.sellingPrice} [{stock.qty} in stock]
-                          </option>
-                        ))}
-                      </select>
-                      
-                      <input 
-                        type="number" 
-                        min="1" 
-                        max={selectedStock ? selectedStock.qty : 100} 
-                        value={item.qty} 
-                        onChange={e => {
-                          const newItems = [...saleItems]
-                          newItems[index].qty = Math.max(1, parseInt(e.target.value) || 1)
-                          setSaleItems(newItems)
-                        }}
-                        className="w-20 bg-background border border-border rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-accent text-sm text-center" 
-                        required 
-                      />
-                      
-                      {saleItems.length > 1 ? (
-                        <button 
-                          type="button" 
-                          onClick={() => setSaleItems(saleItems.filter((_, i) => i !== index))} 
-                          className="text-text-muted hover:text-red-400 p-2"
+                    <div key={index} className="grid grid-cols-12 gap-2 items-center">
+                      <div className="col-span-6">
+                        <select 
+                          value={item.stockId} 
+                          onChange={e => {
+                            const newItems = [...saleItems]
+                            newItems[index].stockId = e.target.value
+                            const found = availableStock.find(s => s.id === e.target.value)
+                            if (found?.sellingPrice && (newItems[index].price === '' || newItems[index].price === 0)) {
+                              newItems[index].price = found.sellingPrice
+                            }
+                            setSaleItems(newItems)
+                          }}
+                          className="w-full bg-background border border-border rounded-xl px-3 py-2 text-white focus:outline-none focus:border-accent appearance-none text-xs truncate" 
+                          required
                         >
-                          <X className="w-4 h-4" />
-                        </button>
-                      ) : (
-                        <div className="w-8"></div>
-                      )}
+                          <option value="" disabled>Select tyre from stock...</option>
+                          {availableStock.map(stock => (
+                            <option key={stock.id} value={stock.id}>
+                              {stock.brand} {stock.model} ({stock.size}) [{stock.qty} in stock]
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      <div className="col-span-2">
+                        <input 
+                          type="number" 
+                          min="1" 
+                          max={selectedStock ? selectedStock.qty : 100} 
+                          value={item.qty} 
+                          onChange={e => {
+                            const newItems = [...saleItems]
+                            newItems[index].qty = Math.max(1, parseInt(e.target.value) || 1)
+                            setSaleItems(newItems)
+                          }}
+                          className="w-full bg-background border border-border rounded-xl px-2 py-2 text-white focus:outline-none focus:border-accent text-xs text-center font-medium" 
+                          required 
+                        />
+                      </div>
+
+                      <div className="col-span-3">
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-2 text-xs text-text-muted">₹</span>
+                          <input 
+                            type="number" 
+                            min="0" 
+                            step="any"
+                            placeholder="Price"
+                            value={item.price} 
+                            onChange={e => {
+                              const newItems = [...saleItems]
+                              newItems[index].price = e.target.value === '' ? '' : Math.max(0, parseFloat(e.target.value) || 0)
+                              setSaleItems(newItems)
+                            }}
+                            className="w-full bg-background border border-border rounded-xl pl-6 pr-2 py-2 text-white focus:outline-none focus:border-accent text-xs font-semibold" 
+                            required 
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="col-span-1 flex justify-center">
+                        {saleItems.length > 1 ? (
+                          <button 
+                            type="button" 
+                            onClick={() => setSaleItems(saleItems.filter((_, i) => i !== index))} 
+                            className="text-text-muted hover:text-red-400 p-1"
+                            title="Remove item"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   )
                 })}
@@ -426,8 +469,8 @@ export default function Sales() {
                   <span className="text-text-muted text-sm font-medium">Total Amount:</span>
                   <span className="text-xl font-bold text-emerald-400">
                     ₹{saleItems.reduce((acc, curr) => {
-                      const stock = availableStock.find(s => s.id === curr.stockId)
-                      return acc + ((stock?.sellingPrice || 0) * curr.qty)
+                      const p = typeof curr.price === 'number' ? curr.price : parseFloat(String(curr.price)) || 0
+                      return acc + (p * curr.qty)
                     }, 0).toLocaleString('en-IN')}
                   </span>
                 </div>
