@@ -36,7 +36,7 @@ const DEFAULT_SETTINGS: ShopSettings = {
   tagline: 'Tyre & Retreading Specialists',
   ownerName: 'Vasco Admin',
   phone: '7907271835',
-  email: 'admin@vascotreads.com',
+  email: 'vascotreadskgm@gmail.com',
   address: 'Variyatyak, Kunnamangalam, Opp. Milk Society - 673 571',
   gstin: '32AAAAA0000A1Z5',
   invoicePrefix: 'INV-',
@@ -271,7 +271,7 @@ export default function Settings() {
                 value={settings.email}
                 onChange={(e) => setSettings({ ...settings, email: e.target.value })}
                 className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm"
-                placeholder="e.g. admin@vascotreads.com"
+                placeholder="e.g. vascotreadskgm@gmail.com"
               />
             </div>
 

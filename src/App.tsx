@@ -14,12 +14,18 @@ import Login from './screens/Login'
 import Sales from './screens/Sales'
 import Expenses from './screens/Expenses'
 import Settings from './screens/Settings'
+import { checkIsAuthenticated, logout } from './services/authService'
 import { cn } from './lib/utils'
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(() => checkIsAuthenticated())
   const [activeScreen, setActiveScreen] = useState('dashboard')
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+
+  const handleLogout = () => {
+    logout()
+    setIsAuthenticated(false)
+  }
 
   if (!isAuthenticated) {
     return <Login onLogin={() => setIsAuthenticated(true)} />
@@ -46,7 +52,7 @@ function App() {
         <Topbar 
           onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
           onNavigate={(screen) => setActiveScreen(screen)}
-          onLogout={() => setIsAuthenticated(false)}
+          onLogout={handleLogout}
         />
         
         <main className="flex-1 overflow-y-auto p-3 sm:p-6 pb-24 md:pb-6">

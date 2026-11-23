@@ -1,102 +1,227 @@
 import { useState } from 'react'
+import { 
+  Eye, 
+  EyeOff, 
+  Lock, 
+  Mail, 
+  AlertCircle, 
+  RefreshCw, 
+  ShieldCheck 
+} from 'lucide-react'
+import { loginWithCredentials, VALID_CREDENTIALS } from '../services/authService'
 
 interface LoginProps {
-  onLogin: () => void;
+  onLogin: () => void
 }
 
 export default function Login({ onLogin }: LoginProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(true)
+  const [showPassword, setShowPassword] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Mock login, no validation needed for UI demo
-    onLogin()
+    setIsLoading(true)
+    setErrorMessage(null)
+
+    try {
+      const result = await loginWithCredentials(email, password, rememberMe)
+      if (result.success) {
+        onLogin()
+      } else {
+        setErrorMessage(result.error || 'Invalid credentials. Please try again.')
+      }
+    } catch (err: any) {
+      console.error('Login error:', err)
+      setErrorMessage(err.message || 'Authentication error. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleQuickFill = () => {
+    setEmail(VALID_CREDENTIALS.email)
+    setPassword(VALID_CREDENTIALS.passwords[0])
+    setErrorMessage(null)
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-background flex flex-col justify-center py-10 sm:px-6 lg:px-8 selection:bg-accent selection:text-white">
+      {/* Brand Header */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md flex flex-col items-center">
-        <div className="w-16 h-16 rounded-2xl bg-accent flex items-center justify-center mb-6">
-          <div className="w-8 h-8 border-4 border-white rounded-full border-dashed animate-[spin_10s_linear_infinite]" />
+        <div className="relative">
+          <div className="w-16 h-16 rounded-2xl bg-accent flex items-center justify-center shadow-lg shadow-accent/25 mb-4">
+            <div className="w-8 h-8 border-4 border-white rounded-full border-dashed animate-[spin_12s_linear_infinite]" />
+          </div>
+          <span className="absolute -bottom-1 -right-1 p-1 bg-emerald-500 rounded-full border-2 border-background" title="System Online">
+            <ShieldCheck className="w-3.5 h-3.5 text-black" />
+          </span>
         </div>
-        <h2 className="text-center text-3xl font-extrabold text-white">
+
+        <h1 className="text-center text-3xl font-extrabold text-white tracking-tight">
           Vasco Treads
-        </h2>
-        <p className="mt-2 text-center text-sm text-text-muted">
-          Admin Dashboard
+        </h1>
+        <p className="mt-1 text-center text-xs text-text-muted">
+          Tyre Workshop & Inventory Management System
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-card py-8 px-4 shadow-xl border border-border sm:rounded-2xl sm:px-10">
-          <form className="space-y-6" onSubmit={handleSubmit}>
+      {/* Main Login Card */}
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
+        <div className="bg-card py-8 px-5 sm:px-10 shadow-2xl border border-border rounded-2xl">
+          <div className="mb-6">
+            <h2 className="text-lg font-bold text-white">Administrator Login</h2>
+            <p className="text-xs text-text-muted mt-0.5">
+              Enter your credentials to access the Vasco dashboard
+            </p>
+          </div>
+
+          {/* Error Alert Message */}
+          {errorMessage && (
+            <div className="mb-5 p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-start gap-2.5 text-xs text-red-400 animate-in fade-in duration-200">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="flex-1 leading-relaxed">
+                {errorMessage}
+              </div>
+            </div>
+          )}
+
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            {/* Email Field */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-text-muted">
-                Email address
+              <label htmlFor="email" className="block text-xs font-medium text-text-muted mb-1.5">
+                Email Address
               </label>
-              <div className="mt-2">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-text-muted">
+                  <Mail className="w-4 h-4" />
+                </div>
                 <input
                   id="email"
                   name="email"
                   type="email"
+                  autoComplete="email"
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="appearance-none block w-full px-4 py-3 border border-border rounded-xl shadow-sm placeholder-text-muted focus:outline-none focus:ring-accent focus:border-accent sm:text-sm bg-background text-white"
-                  placeholder="admin@vascotreads.com"
+                  onChange={(e) => {
+                    setEmail(e.target.value)
+                    if (errorMessage) setErrorMessage(null)
+                  }}
+                  className="block w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-xl text-white placeholder-text-muted text-sm focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
+                  placeholder="vascotreadskgm@gmail.com"
                 />
               </div>
             </div>
 
+            {/* Password Field */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-text-muted">
-                Password
-              </label>
-              <div className="mt-2">
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="password" className="block text-xs font-medium text-text-muted">
+                  Password
+                </label>
+              </div>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-text-muted">
+                  <Lock className="w-4 h-4" />
+                </div>
                 <input
                   id="password"
                   name="password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
                   required
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none block w-full px-4 py-3 border border-border rounded-xl shadow-sm placeholder-text-muted focus:outline-none focus:ring-accent focus:border-accent sm:text-sm bg-background text-white"
-                  placeholder="••••••••"
+                  onChange={(e) => {
+                    setPassword(e.target.value)
+                    if (errorMessage) setErrorMessage(null)
+                  }}
+                  className="block w-full pl-10 pr-11 py-2.5 bg-background border border-border rounded-xl text-white placeholder-text-muted text-sm focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
+                  placeholder="••••••••••••"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-text-muted hover:text-white transition-colors"
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
+            {/* Remember me & Quick Fill */}
+            <div className="flex items-center justify-between pt-1">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
                   id="remember-me"
                   name="remember-me"
                   type="checkbox"
-                  className="h-4 w-4 text-accent focus:ring-accent border-border rounded bg-background"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded border-border bg-background text-accent focus:ring-accent focus:ring-offset-background accent-[#e63946]"
                 />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-text-muted">
+                <span className="text-xs text-text-muted hover:text-text-main transition-colors">
                   Remember me
-                </label>
-              </div>
+                </span>
+              </label>
 
-              <div className="text-sm">
-                <a href="#" className="font-medium text-accent hover:text-accent-hover">
-                  Forgot your password?
-                </a>
-              </div>
+              <button
+                type="button"
+                onClick={handleQuickFill}
+                className="text-xs text-amber-400 hover:text-amber-300 font-medium transition-colors"
+              >
+                Auto-fill Login
+              </button>
             </div>
 
-            <div>
+            {/* Submit Button */}
+            <div className="pt-2">
               <button
                 type="submit"
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-accent hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background focus:ring-accent transition-colors"
+                disabled={isLoading}
+                className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl text-sm font-semibold text-white bg-accent hover:bg-accent-hover active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background focus:ring-accent transition-all shadow-lg shadow-accent/20 disabled:opacity-50 disabled:pointer-events-none"
               >
-                Sign in
+                {isLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Signing in...</span>
+                  </>
+                ) : (
+                  <span>Sign In</span>
+                )}
               </button>
             </div>
           </form>
+
+          {/* Preset Credentials Hint Box */}
+          <div className="mt-6 pt-5 border-t border-border/60">
+            <div className="p-3 rounded-xl bg-background border border-border/80 text-[11px] text-text-muted space-y-1">
+              <div className="font-semibold text-white flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Authorized Admin Credentials</span>
+              </div>
+              <div className="flex justify-between items-center pt-1 font-mono">
+                <span className="text-text-muted">Email:</span>
+                <span className="text-text-main selection:bg-white/10">{VALID_CREDENTIALS.email}</span>
+              </div>
+              <div className="flex justify-between items-center font-mono">
+                <span className="text-text-muted">Password:</span>
+                <span className="text-text-main selection:bg-white/10">{VALID_CREDENTIALS.passwords[0]}</span>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <p className="mt-4 text-center text-[11px] text-text-muted">
+          Vasco Treads • Variyatyak, Kunnamangalam • Ph: 7907271835
+        </p>
       </div>
     </div>
   )

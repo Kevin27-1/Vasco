@@ -76,7 +76,7 @@ export default function Topbar({ onOpenMobileMenu, onNavigate, onLogout }: Topba
         return {
           name: parsed.ownerName || 'Vasco Admin',
           store: parsed.storeName || 'Vasco Treads',
-          email: parsed.email || 'admin@vascotreads.com',
+          email: parsed.email || 'vascotreadskgm@gmail.com',
           phone: parsed.phone || '7907271835'
         }
       }
@@ -84,7 +84,7 @@ export default function Topbar({ onOpenMobileMenu, onNavigate, onLogout }: Topba
     return {
       name: 'Vasco Admin',
       store: 'Vasco Treads',
-      email: 'admin@vascotreads.com',
+      email: 'vascotreadskgm@gmail.com',
       phone: '7907271835'
     }
   })
