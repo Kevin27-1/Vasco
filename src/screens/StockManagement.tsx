@@ -6,8 +6,10 @@ import { cn } from '../lib/utils'
 import {
   type StockItem,
   type StockStatus,
-  type TyreType,
   TYRE_TYPES,
+  defaultTypeQuantities,
+  normalizeTypeQuantities,
+  sumTypeQuantities,
   subscribeToStock,
   addStockItem,
   updateStockItem,
@@ -34,7 +36,6 @@ export default function StockManagement() {
     customerName: 'Walk-in Customer',
     customerPhone: '',
     vehicleNumber: '',
-    tyreType: 'Tubeless + Radial' as TyreType | string,
     paymentMethod: 'UPI',
     date: new Intl.DateTimeFormat('en-CA').format(new Date())
   })
@@ -45,8 +46,7 @@ export default function StockManagement() {
     brand: '',
     model: '',
     size: '',
-    tyreType: 'Tubeless + Radial' as TyreType | string,
-    qty: 1,
+    typeQuantities: defaultTypeQuantities(),
     purchasePrice: 0,
     minStockLevel: 2
   })
@@ -91,6 +91,11 @@ export default function StockManagement() {
 
   const handleCreateStock = async (e: React.FormEvent) => {
     e.preventDefault()
+    const totalQty = sumTypeQuantities(formData.typeQuantities)
+    if (totalQty <= 0) {
+      setErrorMsg('Please enter a quantity greater than 0 for at least one tyre type.')
+      return
+    }
     setIsSubmitting(true)
     setErrorMsg(null)
     try {
@@ -98,8 +103,8 @@ export default function StockManagement() {
         brand: formData.brand,
         model: formData.model,
         size: formData.size,
-        tyreType: formData.tyreType,
-        qty: Number(formData.qty),
+        typeQuantities: formData.typeQuantities,
+        qty: totalQty,
         purchasePrice: Number(formData.purchasePrice),
         minStockLevel: Number(formData.minStockLevel),
         lastUpdated: 'Just now'
@@ -109,8 +114,7 @@ export default function StockManagement() {
         brand: '',
         model: '',
         size: '',
-        tyreType: 'Tubeless + Radial',
-        qty: 1,
+        typeQuantities: defaultTypeQuantities(),
         purchasePrice: 0,
         minStockLevel: 2
       })
@@ -128,12 +132,14 @@ export default function StockManagement() {
     setIsSubmitting(true)
     setErrorMsg(null)
     try {
+      const typeQuantities = normalizeTypeQuantities(editingItem.typeQuantities, editingItem.qty)
+      const totalQty = sumTypeQuantities(typeQuantities)
       await updateStockItem(editingItem.id, {
         brand: editingItem.brand,
         model: editingItem.model,
         size: editingItem.size,
-        tyreType: editingItem.tyreType || 'Tubeless + Radial',
-        qty: Number(editingItem.qty),
+        typeQuantities,
+        qty: totalQty,
         purchasePrice: Number(editingItem.purchasePrice),
         minStockLevel: Number(editingItem.minStockLevel || 2)
       })
@@ -154,7 +160,6 @@ export default function StockManagement() {
       customerName: 'Walk-in Customer',
       customerPhone: '',
       vehicleNumber: '',
-      tyreType: item.tyreType || 'Tubeless + Radial',
       paymentMethod: 'UPI',
       date: new Intl.DateTimeFormat('en-CA').format(new Date())
     })
@@ -184,7 +189,6 @@ export default function StockManagement() {
             brand: sellingItem.brand,
             model: sellingItem.model,
             size: sellingItem.size,
-            tyreType: sellForm.tyreType || sellingItem.tyreType || 'Tubeless + Radial',
             qty: sellForm.qty,
             price: sellForm.sellingPrice,
             purchasePrice: sellingItem.purchasePrice
@@ -316,11 +320,23 @@ export default function StockManagement() {
                 <tr key={item.id} className="hover:bg-card-hover/50 transition-colors">
                   <td className="px-6 py-4">
                     <p className="font-semibold text-text-main">{item.brand}</p>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-xs text-text-muted">{item.model}</span>
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                        {item.tyreType || 'Tubeless + Radial'}
-                      </span>
+                    <p className="text-xs text-text-muted mb-1.5">{item.model}</p>
+                    {/* Breakdown badges of types with qty > 0 */}
+                    <div className="flex flex-wrap gap-1 max-w-[280px]">
+                      {TYRE_TYPES.map((t) => {
+                        const count = item.typeQuantities?.[t] ?? (t === item.tyreType ? item.qty : 0)
+                        if (!count || count <= 0) return null
+                        return (
+                          <span
+                            key={t}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-300 border border-blue-500/20"
+                            title={`${count} units of ${t}`}
+                          >
+                            <span className="font-bold text-white">{count}</span>
+                            <span>{t}</span>
+                          </span>
+                        )
+                      })}
                     </div>
                   </td>
                   <td className="px-6 py-4 text-text-main font-mono text-xs">{item.size}</td>
@@ -358,7 +374,10 @@ export default function StockManagement() {
                         </span>
                       )}
                       <button 
-                        onClick={() => setEditingItem(item)}
+                        onClick={() => setEditingItem({
+                          ...item,
+                          typeQuantities: normalizeTypeQuantities(item.typeQuantities, item.qty)
+                        })}
                         className="p-2 text-text-muted hover:text-accent hover:bg-accent/10 rounded-lg transition-colors"
                         title="Edit Item"
                       >
@@ -452,45 +471,71 @@ export default function StockManagement() {
                 />
               </div>
 
-              {/* Type of Tyre (4 Combinations) */}
-              <div>
-                <label className="block text-xs font-medium text-text-muted mb-1.5">
-                  Type of Tyre (Construction & Tube) <span className="text-accent">*</span>
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {TYRE_TYPES.map((typeOption) => (
-                    <button
-                      key={typeOption}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, tyreType: typeOption })}
-                      className={cn(
-                        "px-3 py-2.5 rounded-xl border text-xs font-semibold text-left transition-all flex items-center justify-between",
-                        formData.tyreType === typeOption
-                          ? "bg-accent/15 border-accent text-white shadow-sm ring-1 ring-accent/30"
-                          : "bg-background border-border text-text-muted hover:text-white hover:border-border/80"
-                      )}
-                    >
-                      <span>{typeOption}</span>
-                      {formData.tyreType === typeOption && (
-                        <Check className="w-3.5 h-3.5 text-accent shrink-0" />
-                      )}
-                    </button>
-                  ))}
+              {/* Tyre Quantities by Type Breakdown */}
+              <div className="p-4 rounded-xl bg-background border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-xs font-semibold text-white">
+                      Tyre Quantities by Type <span className="text-accent">*</span>
+                    </label>
+                    <p className="text-[11px] text-text-muted">
+                      Enter quantity for each combination (e.g. 2 Tubeless+Radial, 3 Tubeless+Nylon)
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-text-muted block">Total Quantity</span>
+                    <span className="text-sm font-bold text-emerald-400 font-mono">
+                      {sumTypeQuantities(formData.typeQuantities)} units
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  {TYRE_TYPES.map((typeOption) => {
+                    const currentVal = formData.typeQuantities[typeOption] || 0
+                    return (
+                      <div
+                        key={typeOption}
+                        className={cn(
+                          "p-2.5 rounded-xl border transition-all flex items-center justify-between gap-3",
+                          currentVal > 0
+                            ? "bg-accent/10 border-accent/40 text-white"
+                            : "bg-card border-border text-text-muted hover:border-border/80"
+                        )}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold truncate text-white">{typeOption}</p>
+                          <p className="text-[10px] text-text-muted">
+                            {typeOption.includes('Tubeless') ? 'Tubeless tyre' : 'Tube-type tyre'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            value={currentVal === 0 ? '' : currentVal}
+                            onChange={(e) => {
+                              const val = Math.max(0, parseInt(e.target.value) || 0)
+                              setFormData(prev => ({
+                                ...prev,
+                                typeQuantities: {
+                                  ...prev.typeQuantities,
+                                  [typeOption]: val
+                                }
+                              }))
+                            }}
+                            className="w-16 px-2.5 py-1.5 bg-background border border-border rounded-lg text-white font-mono text-xs font-bold text-center focus:outline-none focus:border-accent"
+                          />
+                          <span className="text-[10px] text-text-muted">units</span>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-text-muted mb-1">Quantity *</label>
-                  <input 
-                    type="number" 
-                    min="0" 
-                    value={formData.qty}
-                    onChange={(e) => setFormData({ ...formData, qty: Math.max(0, parseInt(e.target.value) || 0) })}
-                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm" 
-                    required 
-                  />
-                </div>
                 <div>
                   <label className="block text-xs font-medium text-text-muted mb-1">Purchase Price (₹) *</label>
                   <input 
@@ -503,18 +548,17 @@ export default function StockManagement() {
                     required 
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-text-muted mb-1">Minimum Stock Alert Level</label>
-                <input 
-                  type="number" 
-                  min="1" 
-                  value={formData.minStockLevel}
-                  onChange={(e) => setFormData({ ...formData, minStockLevel: Math.max(1, parseInt(e.target.value) || 2) })}
-                  className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm" 
-                  required 
-                />
+                <div>
+                  <label className="block text-xs font-medium text-text-muted mb-1">Minimum Stock Alert Level</label>
+                  <input 
+                    type="number" 
+                    min="1" 
+                    value={formData.minStockLevel}
+                    onChange={(e) => setFormData({ ...formData, minStockLevel: Math.max(1, parseInt(e.target.value) || 2) })}
+                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm" 
+                    required 
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 mt-8">
@@ -597,52 +641,92 @@ export default function StockManagement() {
                 />
               </div>
 
-              {/* Type of Tyre (4 Combinations) */}
-              <div>
-                <label className="block text-xs font-medium text-text-muted mb-1.5">
-                  Type of Tyre (Construction & Tube) <span className="text-accent">*</span>
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {TYRE_TYPES.map((typeOption) => (
-                    <button
-                      key={typeOption}
-                      type="button"
-                      onClick={() => setEditingItem({ ...editingItem, tyreType: typeOption })}
-                      className={cn(
-                        "px-3 py-2.5 rounded-xl border text-xs font-semibold text-left transition-all flex items-center justify-between",
-                        (editingItem.tyreType || 'Tubeless + Radial') === typeOption
-                          ? "bg-accent/15 border-accent text-white shadow-sm ring-1 ring-accent/30"
-                          : "bg-background border-border text-text-muted hover:text-white hover:border-border/80"
-                      )}
-                    >
-                      <span>{typeOption}</span>
-                      {(editingItem.tyreType || 'Tubeless + Radial') === typeOption && (
-                        <Check className="w-3.5 h-3.5 text-accent shrink-0" />
-                      )}
-                    </button>
-                  ))}
+              {/* Tyre Quantities by Type Breakdown */}
+              <div className="p-4 rounded-xl bg-background border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-xs font-semibold text-white">
+                      Tyre Quantities by Type <span className="text-accent">*</span>
+                    </label>
+                    <p className="text-[11px] text-text-muted">
+                      Update quantity for each combination (e.g. 2 Tubeless+Radial, 3 Tubeless+Nylon)
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-text-muted block">Total Quantity</span>
+                    <span className="text-sm font-bold text-emerald-400 font-mono">
+                      {sumTypeQuantities(editingItem.typeQuantities)} units
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  {TYRE_TYPES.map((typeOption) => {
+                    const currentVal = (editingItem.typeQuantities && editingItem.typeQuantities[typeOption]) || 0
+                    return (
+                      <div
+                        key={typeOption}
+                        className={cn(
+                          "p-2.5 rounded-xl border transition-all flex items-center justify-between gap-3",
+                          currentVal > 0
+                            ? "bg-accent/10 border-accent/40 text-white"
+                            : "bg-card border-border text-text-muted hover:border-border/80"
+                        )}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold truncate text-white">{typeOption}</p>
+                          <p className="text-[10px] text-text-muted">
+                            {typeOption.includes('Tubeless') ? 'Tubeless tyre' : 'Tube-type tyre'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            value={currentVal === 0 ? '' : currentVal}
+                            onChange={(e) => {
+                              const val = Math.max(0, parseInt(e.target.value) || 0)
+                              setEditingItem(prev => {
+                                if (!prev) return null
+                                const norm = normalizeTypeQuantities(prev.typeQuantities, prev.qty)
+                                const updated = { ...norm, [typeOption]: val }
+                                return {
+                                  ...prev,
+                                  typeQuantities: updated,
+                                  qty: sumTypeQuantities(updated)
+                                }
+                              })
+                            }}
+                            className="w-16 px-2.5 py-1.5 bg-background border border-border rounded-lg text-white font-mono text-xs font-bold text-center focus:outline-none focus:border-accent"
+                          />
+                          <span className="text-[10px] text-text-muted">units</span>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-text-muted mb-1">Quantity</label>
-                  <input 
-                    type="number" 
-                    min="0" 
-                    value={editingItem.qty}
-                    onChange={(e) => setEditingItem({ ...editingItem, qty: Math.max(0, parseInt(e.target.value) || 0) })}
-                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm" 
-                    required 
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-text-muted mb-1">Purchase (₹)</label>
+                  <label className="block text-xs font-medium text-text-muted mb-1">Purchase Price (₹) *</label>
                   <input 
                     type="number" 
                     min="0" 
                     value={editingItem.purchasePrice}
                     onChange={(e) => setEditingItem({ ...editingItem, purchasePrice: Math.max(0, parseFloat(e.target.value) || 0) })}
+                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm" 
+                    required 
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-muted mb-1">Min Stock Alert</label>
+                  <input 
+                    type="number" 
+                    min="1" 
+                    value={editingItem.minStockLevel || 2}
+                    onChange={(e) => setEditingItem({ ...editingItem, minStockLevel: Math.max(1, parseInt(e.target.value) || 2) })}
                     className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm" 
                     required 
                   />
@@ -795,33 +879,6 @@ export default function StockManagement() {
                     Remaining after sale: {sellingItem.qty - sellForm.qty} units
                   </div>
                 )}
-              </div>
-
-              {/* Type of Tyre Sold */}
-              <div>
-                <label className="block text-xs font-medium text-text-muted mb-1.5">
-                  Type of Tyre Sold <span className="text-accent">*</span>
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {TYRE_TYPES.map((typeOption) => (
-                    <button
-                      key={typeOption}
-                      type="button"
-                      onClick={() => setSellForm(f => ({ ...f, tyreType: typeOption }))}
-                      className={cn(
-                        "px-3 py-2 rounded-xl border text-xs font-semibold text-left transition-all flex items-center justify-between",
-                        sellForm.tyreType === typeOption
-                          ? "bg-accent/15 border-accent text-white shadow-sm ring-1 ring-accent/30"
-                          : "bg-background border-border text-text-muted hover:text-white hover:border-border/80"
-                      )}
-                    >
-                      <span>{typeOption}</span>
-                      {sellForm.tyreType === typeOption && (
-                        <Check className="w-3.5 h-3.5 text-accent shrink-0" />
-                      )}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               {/* Selling price per unit & Date */}

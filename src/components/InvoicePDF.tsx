@@ -282,7 +282,7 @@ export const InvoicePDF = ({
                   <Text style={styles.tableColSlBody}>{index + 1}</Text>
                   <Text style={styles.tableColHSNBody}></Text>
                   <Text style={styles.tableColNameBody}>
-                    {item.brand} {item.model} ({item.size}){item.tyreType ? ` • ${item.tyreType}` : ''}
+                    {item.brand} {item.model} ({item.size})
                   </Text>
                   <Text style={styles.tableColUOMBody}>NOS</Text>
                   <Text style={styles.tableColQtyBody}>{item.qty}</Text>

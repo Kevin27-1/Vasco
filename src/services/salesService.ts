@@ -11,7 +11,7 @@ import {
   runTransaction
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import { computeStatus } from './stockService'
+import { computeStatus, deductTypeQuantities, normalizeTypeQuantities } from './stockService'
 
 export interface SaleItemDetail {
   stockId?: string
@@ -183,8 +183,12 @@ export async function createSale(params: CreateSaleParams): Promise<SaleRecord> 
           const newQty = Math.max(0, currentQty - item.qty)
           const newStatus = computeStatus(newQty, minStock)
 
+          const currentTypeQuantities = normalizeTypeQuantities(currentData.typeQuantities, currentQty)
+          const updatedTypeQuantities = deductTypeQuantities(currentTypeQuantities, item.qty)
+
           transaction.update(stockDocRef, {
             qty: newQty,
+            typeQuantities: updatedTypeQuantities,
             status: newStatus,
             lastUpdated: new Intl.DateTimeFormat('en-IN', {
               day: '2-digit',
