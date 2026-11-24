@@ -18,6 +18,7 @@ export interface SaleItemDetail {
   brand: string
   model: string
   size: string
+  tyreType?: string
   qty: number
   price: number
   purchasePrice?: number

@@ -156,6 +156,7 @@ interface InvoiceProps {
     brand: string
     model: string
     size: string
+    tyreType?: string
     qty: number
     price: number
   }[]
@@ -280,7 +281,9 @@ export const InvoicePDF = ({
                 <View style={styles.tableRow} key={index}>
                   <Text style={styles.tableColSlBody}>{index + 1}</Text>
                   <Text style={styles.tableColHSNBody}></Text>
-                  <Text style={styles.tableColNameBody}>{item.brand} {item.model} ({item.size})</Text>
+                  <Text style={styles.tableColNameBody}>
+                    {item.brand} {item.model} ({item.size}){item.tyreType ? ` • ${item.tyreType}` : ''}
+                  </Text>
                   <Text style={styles.tableColUOMBody}>NOS</Text>
                   <Text style={styles.tableColQtyBody}>{item.qty}</Text>
                   <Text style={styles.tableColRateBody}>{baseRate.toFixed(2)}</Text>

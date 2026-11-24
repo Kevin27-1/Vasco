@@ -86,11 +86,12 @@ export default function Settings() {
 
   const handleExportStockCSV = () => {
     subscribeToStock((items) => {
-      const headers = ['Brand', 'Model', 'Size', 'Qty', 'PurchasePrice', 'Status']
+      const headers = ['Brand', 'Model', 'Size', 'TyreType', 'Qty', 'PurchasePrice', 'Status']
       const rows = items.map(i => [
         `"${i.brand}"`,
         `"${i.model}"`,
         `"${i.size}"`,
+        `"${i.tyreType || 'Tubeless + Radial'}"`,
         i.qty,
         i.purchasePrice,
         `"${i.status}"`
@@ -108,13 +109,14 @@ export default function Settings() {
 
   const handleExportSalesCSV = () => {
     subscribeToSales((sales) => {
-      const headers = ['InvoiceNumber', 'CustomerName', 'Phone', 'VehiclePlate', 'Date', 'TotalAmount', 'PaymentMethod', 'ItemsCount']
+      const headers = ['InvoiceNumber', 'CustomerName', 'Phone', 'VehiclePlate', 'Date', 'TyreTypes', 'TotalAmount', 'PaymentMethod', 'ItemsCount']
       const rows = sales.map(s => [
         `"${s.invoiceNumber}"`,
         `"${s.customerName}"`,
         `"${s.customerPhone}"`,
         `"${s.vehicleNumber || ''}"`,
         `"${s.date}"`,
+        `"${s.items?.map(it => it.tyreType).filter(Boolean).join('; ') || ''}"`,
         s.totalAmount,
         `"${s.paymentMethod || 'Cash'}"`,
         s.items?.length || 0

@@ -6,6 +6,8 @@ import { cn } from '../lib/utils'
 import {
   type StockItem,
   type StockStatus,
+  type TyreType,
+  TYRE_TYPES,
   subscribeToStock,
   addStockItem,
   updateStockItem,
@@ -32,6 +34,7 @@ export default function StockManagement() {
     customerName: 'Walk-in Customer',
     customerPhone: '',
     vehicleNumber: '',
+    tyreType: 'Tubeless + Radial' as TyreType | string,
     paymentMethod: 'UPI',
     date: new Intl.DateTimeFormat('en-CA').format(new Date())
   })
@@ -42,6 +45,7 @@ export default function StockManagement() {
     brand: '',
     model: '',
     size: '',
+    tyreType: 'Tubeless + Radial' as TyreType | string,
     qty: 1,
     purchasePrice: 0,
     minStockLevel: 2
@@ -81,7 +85,8 @@ export default function StockManagement() {
     item.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.size.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.status.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.model.toLowerCase().includes(searchQuery.toLowerCase())
+    item.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (item.tyreType || '').toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   const handleCreateStock = async (e: React.FormEvent) => {
@@ -93,6 +98,7 @@ export default function StockManagement() {
         brand: formData.brand,
         model: formData.model,
         size: formData.size,
+        tyreType: formData.tyreType,
         qty: Number(formData.qty),
         purchasePrice: Number(formData.purchasePrice),
         minStockLevel: Number(formData.minStockLevel),
@@ -103,6 +109,7 @@ export default function StockManagement() {
         brand: '',
         model: '',
         size: '',
+        tyreType: 'Tubeless + Radial',
         qty: 1,
         purchasePrice: 0,
         minStockLevel: 2
@@ -125,6 +132,7 @@ export default function StockManagement() {
         brand: editingItem.brand,
         model: editingItem.model,
         size: editingItem.size,
+        tyreType: editingItem.tyreType || 'Tubeless + Radial',
         qty: Number(editingItem.qty),
         purchasePrice: Number(editingItem.purchasePrice),
         minStockLevel: Number(editingItem.minStockLevel || 2)
@@ -146,6 +154,7 @@ export default function StockManagement() {
       customerName: 'Walk-in Customer',
       customerPhone: '',
       vehicleNumber: '',
+      tyreType: item.tyreType || 'Tubeless + Radial',
       paymentMethod: 'UPI',
       date: new Intl.DateTimeFormat('en-CA').format(new Date())
     })
@@ -175,6 +184,7 @@ export default function StockManagement() {
             brand: sellingItem.brand,
             model: sellingItem.model,
             size: sellingItem.size,
+            tyreType: sellForm.tyreType || sellingItem.tyreType || 'Tubeless + Radial',
             qty: sellForm.qty,
             price: sellForm.sellingPrice,
             purchasePrice: sellingItem.purchasePrice
@@ -306,7 +316,12 @@ export default function StockManagement() {
                 <tr key={item.id} className="hover:bg-card-hover/50 transition-colors">
                   <td className="px-6 py-4">
                     <p className="font-semibold text-text-main">{item.brand}</p>
-                    <p className="text-xs text-text-muted">{item.model}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-xs text-text-muted">{item.model}</span>
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                        {item.tyreType || 'Tubeless + Radial'}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-text-main font-mono text-xs">{item.size}</td>
                   <td className="px-6 py-4">
@@ -437,6 +452,33 @@ export default function StockManagement() {
                 />
               </div>
 
+              {/* Type of Tyre (4 Combinations) */}
+              <div>
+                <label className="block text-xs font-medium text-text-muted mb-1.5">
+                  Type of Tyre (Construction & Tube) <span className="text-accent">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {TYRE_TYPES.map((typeOption) => (
+                    <button
+                      key={typeOption}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, tyreType: typeOption })}
+                      className={cn(
+                        "px-3 py-2.5 rounded-xl border text-xs font-semibold text-left transition-all flex items-center justify-between",
+                        formData.tyreType === typeOption
+                          ? "bg-accent/15 border-accent text-white shadow-sm ring-1 ring-accent/30"
+                          : "bg-background border-border text-text-muted hover:text-white hover:border-border/80"
+                      )}
+                    >
+                      <span>{typeOption}</span>
+                      {formData.tyreType === typeOption && (
+                        <Check className="w-3.5 h-3.5 text-accent shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-text-muted mb-1">Quantity *</label>
@@ -553,6 +595,33 @@ export default function StockManagement() {
                   className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm" 
                   required 
                 />
+              </div>
+
+              {/* Type of Tyre (4 Combinations) */}
+              <div>
+                <label className="block text-xs font-medium text-text-muted mb-1.5">
+                  Type of Tyre (Construction & Tube) <span className="text-accent">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {TYRE_TYPES.map((typeOption) => (
+                    <button
+                      key={typeOption}
+                      type="button"
+                      onClick={() => setEditingItem({ ...editingItem, tyreType: typeOption })}
+                      className={cn(
+                        "px-3 py-2.5 rounded-xl border text-xs font-semibold text-left transition-all flex items-center justify-between",
+                        (editingItem.tyreType || 'Tubeless + Radial') === typeOption
+                          ? "bg-accent/15 border-accent text-white shadow-sm ring-1 ring-accent/30"
+                          : "bg-background border-border text-text-muted hover:text-white hover:border-border/80"
+                      )}
+                    >
+                      <span>{typeOption}</span>
+                      {(editingItem.tyreType || 'Tubeless + Radial') === typeOption && (
+                        <Check className="w-3.5 h-3.5 text-accent shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -726,6 +795,33 @@ export default function StockManagement() {
                     Remaining after sale: {sellingItem.qty - sellForm.qty} units
                   </div>
                 )}
+              </div>
+
+              {/* Type of Tyre Sold */}
+              <div>
+                <label className="block text-xs font-medium text-text-muted mb-1.5">
+                  Type of Tyre Sold <span className="text-accent">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {TYRE_TYPES.map((typeOption) => (
+                    <button
+                      key={typeOption}
+                      type="button"
+                      onClick={() => setSellForm(f => ({ ...f, tyreType: typeOption }))}
+                      className={cn(
+                        "px-3 py-2 rounded-xl border text-xs font-semibold text-left transition-all flex items-center justify-between",
+                        sellForm.tyreType === typeOption
+                          ? "bg-accent/15 border-accent text-white shadow-sm ring-1 ring-accent/30"
+                          : "bg-background border-border text-text-muted hover:text-white hover:border-border/80"
+                      )}
+                    >
+                      <span>{typeOption}</span>
+                      {sellForm.tyreType === typeOption && (
+                        <Check className="w-3.5 h-3.5 text-accent shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Selling price per unit & Date */}
