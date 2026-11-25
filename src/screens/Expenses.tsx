@@ -61,13 +61,23 @@ const CATEGORY_COLORS = [
   '#a8dadc', '#9b5de5', '#00bbf9', '#00f5d4'
 ]
 
-export default function Expenses() {
+interface ExpensesProps {
+  externalSearch?: { query: string; key: number } | null
+}
+
+export default function Expenses({ externalSearch }: ExpensesProps = {}) {
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   // Filters & Search
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(externalSearch?.query || '')
+
+  useEffect(() => {
+    if (externalSearch) {
+      setSearchQuery(externalSearch.query)
+    }
+  }, [externalSearch])
   const [selectedFrequency, setSelectedFrequency] = useState<string>('all')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('all')

@@ -21,6 +21,14 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => checkIsAuthenticated())
   const [activeScreen, setActiveScreen] = useState('dashboard')
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [externalSearch, setExternalSearch] = useState<{ query: string; key: number } | null>(null)
+
+  const handleNavigate = (screen: string, searchFilter?: string) => {
+    setActiveScreen(screen)
+    if (searchFilter !== undefined) {
+      setExternalSearch({ query: searchFilter, key: Date.now() })
+    }
+  }
 
   const handleLogout = () => {
     logout()
@@ -51,16 +59,16 @@ function App() {
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         <Topbar 
           onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
-          onNavigate={(screen) => setActiveScreen(screen)}
+          onNavigate={handleNavigate}
           onLogout={handleLogout}
         />
         
         <main className="flex-1 overflow-y-auto p-3 sm:p-6 pb-24 md:pb-6">
           <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
             {activeScreen === 'dashboard' && <Dashboard />}
-            {activeScreen === 'stock' && <StockManagement />}
-            {activeScreen === 'sales' && <Sales />}
-            {activeScreen === 'expenses' && <Expenses />}
+            {activeScreen === 'stock' && <StockManagement externalSearch={externalSearch} />}
+            {activeScreen === 'sales' && <Sales externalSearch={externalSearch} />}
+            {activeScreen === 'expenses' && <Expenses externalSearch={externalSearch} />}
             {activeScreen === 'settings' && <Settings />}
           </div>
         </main>

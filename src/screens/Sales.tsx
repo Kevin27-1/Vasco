@@ -53,13 +53,23 @@ function getDaysRemaining(dueDateStr?: string): { days: number; isOverdue: boole
   }
 }
 
-export default function Sales() {
+interface SalesProps {
+  externalSearch?: { query: string; key: number } | null
+}
+
+export default function Sales({ externalSearch }: SalesProps = {}) {
   const [sales, setSales] = useState<SaleRecord[]>([])
   const [availableStock, setAvailableStock] = useState<StockItem[]>([])
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(() => externalSearch?.query || '')
+
+  useEffect(() => {
+    if (externalSearch) {
+      setSearchQuery(externalSearch.query)
+    }
+  }, [externalSearch])
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   // Tab View: 'all' = All Invoices, 'credit' = Credit & Dues

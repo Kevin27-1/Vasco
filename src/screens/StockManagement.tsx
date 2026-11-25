@@ -18,12 +18,22 @@ import {
 } from '../services/stockService'
 import { createSale, type SaleRecord } from '../services/salesService'
 
-export default function StockManagement() {
+interface StockManagementProps {
+  externalSearch?: { query: string; key: number } | null
+}
+
+export default function StockManagement({ externalSearch }: StockManagementProps = {}) {
   const [stock, setStock] = useState<StockItem[]>([])
   const [loading, setLoading] = useState(true)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<StockItem | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(() => externalSearch?.query || '')
+
+  useEffect(() => {
+    if (externalSearch) {
+      setSearchQuery(externalSearch.query)
+    }
+  }, [externalSearch])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successNotice, setSuccessNotice] = useState<string | null>(null)

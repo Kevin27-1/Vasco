@@ -15,15 +15,18 @@ import {
   Receipt, 
   User, 
   ChevronDown, 
-  X
+  X,
+  LayoutDashboard,
+  ArrowRight
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { subscribeToStock, type StockItem } from '../services/stockService'
 import { subscribeToSales, type SaleRecord } from '../services/salesService'
+import { subscribeToExpenses, type ExpenseRecord } from '../services/expenseService'
 
 interface TopbarProps {
   onOpenMobileMenu?: () => void;
-  onNavigate?: (screen: string) => void;
+  onNavigate?: (screen: string, searchFilter?: string) => void;
   onLogout?: () => void;
 }
 
@@ -53,9 +56,14 @@ export default function Topbar({ onOpenMobileMenu, onNavigate, onLogout }: Topba
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false)
   const [notifFilter, setNotifFilter] = useState<'all' | 'alerts' | 'sales'>('all')
 
-  // Real-time stock & sales for dynamic notifications
+  // Global search state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+
+  // Real-time stock, sales & expenses for dynamic notifications and global search
   const [stock, setStock] = useState<StockItem[]>([])
   const [sales, setSales] = useState<SaleRecord[]>([])
+  const [expenses, setExpenses] = useState<ExpenseRecord[]>([])
 
   // Read notifications tracked in localStorage
   const [readNotifIds, setReadNotifIds] = useState<string[]>(() => {
@@ -91,15 +99,19 @@ export default function Topbar({ onOpenMobileMenu, onNavigate, onLogout }: Topba
 
   const notifRef = useRef<HTMLDivElement>(null)
   const profileRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Subscriptions to live Firestore
   useEffect(() => {
     const unsubStock = subscribeToStock((items) => setStock(items))
     const unsubSales = subscribeToSales((records) => setSales(records))
+    const unsubExpenses = subscribeToExpenses((records) => setExpenses(records))
 
     return () => {
       unsubStock()
       unsubSales()
+      unsubExpenses()
     }
   }, [])
 
@@ -112,10 +124,122 @@ export default function Topbar({ onOpenMobileMenu, onNavigate, onLogout }: Topba
       if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
         setIsProfileOpen(false)
       }
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setIsSearchOpen(false)
+      }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  // Keyboard shortcuts: Ctrl+K or '/' to focus search, Escape to close
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+        setIsSearchOpen(true)
+      } else if (
+        e.key === '/' &&
+        document.activeElement?.tagName !== 'INPUT' &&
+        document.activeElement?.tagName !== 'TEXTAREA' &&
+        document.activeElement?.tagName !== 'SELECT'
+      ) {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+        setIsSearchOpen(true)
+      } else if (e.key === 'Escape' && isSearchOpen) {
+        setIsSearchOpen(false)
+        searchInputRef.current?.blur()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isSearchOpen])
+
+  // Global search results across Stock, Sales/Invoices, Expenses, and Pages
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) {
+      return {
+        stock: [] as StockItem[],
+        sales: [] as SaleRecord[],
+        expenses: [] as ExpenseRecord[],
+        pages: [] as { id: string; label: string; desc: string; icon: typeof LayoutDashboard }[],
+        totalCount: 0
+      }
+    }
+
+    const matchedStock = stock
+      .filter(
+        (item) =>
+          item.brand.toLowerCase().includes(q) ||
+          item.model.toLowerCase().includes(q) ||
+          item.size.toLowerCase().includes(q) ||
+          (item.tyreType || '').toLowerCase().includes(q) ||
+          item.status.toLowerCase().includes(q)
+      )
+      .slice(0, 5)
+
+    const matchedSales = sales
+      .filter(
+        (s) =>
+          s.invoiceNumber.toLowerCase().includes(q) ||
+          s.customerName.toLowerCase().includes(q) ||
+          s.customerPhone.toLowerCase().includes(q) ||
+          (s.vehicleNumber || '').toLowerCase().includes(q) ||
+          (s.paymentMethod || '').toLowerCase().includes(q) ||
+          s.items.some(
+            (it) =>
+              it.brand.toLowerCase().includes(q) ||
+              it.model?.toLowerCase().includes(q) ||
+              it.size?.toLowerCase().includes(q) ||
+              (it.tyreType || '').toLowerCase().includes(q)
+          )
+      )
+      .slice(0, 5)
+
+    const matchedExpenses = expenses
+      .filter(
+        (ex) =>
+          ex.title.toLowerCase().includes(q) ||
+          ex.category.toLowerCase().includes(q) ||
+          (ex.notes || '').toLowerCase().includes(q) ||
+          (ex.receiptNumber || '').toLowerCase().includes(q) ||
+          ex.paymentMethod.toLowerCase().includes(q)
+      )
+      .slice(0, 4)
+
+    const allPages = [
+      { id: 'dashboard', label: 'Dashboard Overview', desc: 'Net profit, revenue, & daily charts', icon: LayoutDashboard },
+      { id: 'stock', label: 'Stock Management', desc: 'Tyre inventory, sizes & construction types', icon: PackageSearch },
+      { id: 'sales', label: 'Sales & Invoices', desc: 'Billing, vehicle plates, credit & dues', icon: CircleDollarSign },
+      { id: 'expenses', label: 'Expenses & Overhead', desc: 'Daily, monthly & one-time shop expenses', icon: Receipt },
+      { id: 'settings', label: 'Settings & CSV Export', desc: 'Shop details, tax settings & data backups', icon: Settings }
+    ]
+
+    const matchedPages = allPages.filter(
+      (p) =>
+        p.label.toLowerCase().includes(q) ||
+        p.desc.toLowerCase().includes(q) ||
+        p.id.toLowerCase().includes(q)
+    )
+
+    return {
+      stock: matchedStock,
+      sales: matchedSales,
+      expenses: matchedExpenses,
+      pages: matchedPages,
+      totalCount: matchedStock.length + matchedSales.length + matchedExpenses.length + matchedPages.length
+    }
+  }, [searchQuery, stock, sales, expenses])
+
+  const handleSelectSearchResult = (screen: string, filterText?: string) => {
+    setIsSearchOpen(false)
+    if (onNavigate) {
+      onNavigate(screen, filterText)
+    }
+  }
 
   // Generate real notifications from inventory & sales
   const notifications: NotificationItem[] = useMemo(() => {
@@ -237,16 +361,278 @@ export default function Topbar({ onOpenMobileMenu, onNavigate, onLogout }: Topba
           <Menu className="w-5 h-5" />
         </button>
 
-        {/* Search input */}
-        <div className="relative flex-1">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="h-4 w-4 text-text-muted" />
+        {/* Global Interactive Search */}
+        <div className="relative flex-1" ref={searchRef}>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-text-muted" />
+            </div>
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onFocus={() => setIsSearchOpen(true)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value)
+                setIsSearchOpen(true)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && searchQuery.trim()) {
+                  e.preventDefault()
+                  if (searchResults.stock.length > 0) {
+                    handleSelectSearchResult('stock', searchQuery.trim())
+                  } else if (searchResults.sales.length > 0) {
+                    handleSelectSearchResult('sales', searchQuery.trim())
+                  } else if (searchResults.expenses.length > 0) {
+                    handleSelectSearchResult('expenses', searchQuery.trim())
+                  } else if (searchResults.pages.length > 0) {
+                    handleSelectSearchResult(searchResults.pages[0].id)
+                  }
+                }
+              }}
+              placeholder="Search tyres, plates, customers, invoices..."
+              className="block w-full pl-9 pr-14 py-1.5 sm:py-2 border border-border rounded-xl leading-5 bg-card text-text-main placeholder-text-muted focus:outline-none focus:border-accent text-xs transition-colors"
+            />
+            <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center">
+              {searchQuery ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('')
+                    searchInputRef.current?.focus()
+                  }}
+                  className="p-1 text-text-muted hover:text-white rounded-md transition-colors"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-text-muted bg-background border border-border rounded">
+                  Ctrl K
+                </kbd>
+              )}
+            </div>
           </div>
-          <input
-            type="text"
-            placeholder="Search tyre brands, sizes, invoices..."
-            className="block w-full pl-9 pr-3 py-1.5 sm:py-2 border border-border rounded-xl leading-5 bg-card text-text-main placeholder-text-muted focus:outline-none focus:border-accent text-xs transition-colors"
-          />
+
+          {/* Search Results Dropdown */}
+          {isSearchOpen && searchQuery.trim().length > 0 && (
+            <div className="absolute left-0 right-0 sm:w-[440px] mt-2 bg-card border border-border rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="max-h-[70vh] overflow-y-auto divide-y divide-border/60">
+                {searchResults.totalCount === 0 ? (
+                  <div className="p-6 text-center text-text-muted">
+                    <Search className="w-7 h-7 mx-auto mb-2 opacity-30" />
+                    <p className="text-xs font-medium text-white">No results for "{searchQuery}"</p>
+                    <p className="text-[11px] mt-0.5">Try searching a brand, tyre size, customer name, vehicle plate, or invoice #</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Stock Results */}
+                    {searchResults.stock.length > 0 && (
+                      <div className="p-2">
+                        <div className="px-2.5 py-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                          <span className="flex items-center gap-1.5">
+                            <PackageSearch className="w-3 h-3 text-emerald-400" />
+                            Tyre Stock
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleSelectSearchResult('stock', searchQuery.trim())}
+                            className="text-accent hover:underline normal-case font-medium"
+                          >
+                            Filter in Stock →
+                          </button>
+                        </div>
+                        <div className="space-y-0.5 mt-1">
+                          {searchResults.stock.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => handleSelectSearchResult('stock', item.brand + ' ' + item.model)}
+                              className="w-full px-2.5 py-2 rounded-xl hover:bg-card-hover transition-colors text-left flex items-center justify-between gap-2 group"
+                            >
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs font-semibold text-white truncate">
+                                    {item.brand} {item.model}
+                                  </span>
+                                  <span className="text-[10px] font-mono text-text-muted">({item.size})</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                    {item.tyreType || 'Tubeless + Radial'}
+                                  </span>
+                                  <span className="text-[10px] text-text-muted">
+                                    ₹{item.purchasePrice.toLocaleString('en-IN')}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span
+                                  className={cn(
+                                    "text-[10px] font-semibold px-2 py-0.5 rounded-md",
+                                    item.qty === 0
+                                      ? "bg-red-500/10 text-red-400"
+                                      : item.qty <= (item.minStockLevel || 2)
+                                      ? "bg-yellow-500/10 text-yellow-400"
+                                      : "bg-emerald-500/10 text-emerald-400"
+                                  )}
+                                >
+                                  {item.qty} in stock
+                                </span>
+                                <ArrowRight className="w-3.5 h-3.5 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sales & Invoices Results */}
+                    {searchResults.sales.length > 0 && (
+                      <div className="p-2">
+                        <div className="px-2.5 py-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                          <span className="flex items-center gap-1.5">
+                            <CircleDollarSign className="w-3 h-3 text-blue-400" />
+                            Sales & Invoices
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleSelectSearchResult('sales', searchQuery.trim())}
+                            className="text-accent hover:underline normal-case font-medium"
+                          >
+                            Filter in Sales →
+                          </button>
+                        </div>
+                        <div className="space-y-0.5 mt-1">
+                          {searchResults.sales.map((sale) => (
+                            <button
+                              key={sale.id}
+                              type="button"
+                              onClick={() => handleSelectSearchResult('sales', sale.invoiceNumber)}
+                              className="w-full px-2.5 py-2 rounded-xl hover:bg-card-hover transition-colors text-left flex items-center justify-between gap-2 group"
+                            >
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[11px] font-mono font-bold text-accent">
+                                    #{sale.invoiceNumber}
+                                  </span>
+                                  <span className="text-xs font-semibold text-white truncate">
+                                    {sale.customerName}
+                                  </span>
+                                  {sale.vehicleNumber && (
+                                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#2a2a2a] text-amber-300 border border-white/5">
+                                      {sale.vehicleNumber}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[10px] text-text-muted mt-0.5 truncate">
+                                  {sale.date} • {sale.customerPhone || 'No phone'} • {sale.paymentMethod || 'Cash'}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0 text-right">
+                                <div>
+                                  <span className="text-xs font-bold text-emerald-400 block">
+                                    ₹{sale.totalAmount.toLocaleString('en-IN')}
+                                  </span>
+                                  {sale.isCreditSale && (sale.remainingDue || 0) > 0 && (
+                                    <span className="text-[10px] text-amber-400 font-mono">
+                                      Due ₹{(sale.remainingDue || 0).toLocaleString('en-IN')}
+                                    </span>
+                                  )}
+                                </div>
+                                <ArrowRight className="w-3.5 h-3.5 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Expenses Results */}
+                    {searchResults.expenses.length > 0 && (
+                      <div className="p-2">
+                        <div className="px-2.5 py-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                          <span className="flex items-center gap-1.5">
+                            <Receipt className="w-3 h-3 text-amber-400" />
+                            Expenses
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleSelectSearchResult('expenses', searchQuery.trim())}
+                            className="text-accent hover:underline normal-case font-medium"
+                          >
+                            Filter in Expenses →
+                          </button>
+                        </div>
+                        <div className="space-y-0.5 mt-1">
+                          {searchResults.expenses.map((exp) => (
+                            <button
+                              key={exp.id}
+                              type="button"
+                              onClick={() => handleSelectSearchResult('expenses', exp.title)}
+                              className="w-full px-2.5 py-2 rounded-xl hover:bg-card-hover transition-colors text-left flex items-center justify-between gap-2 group"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-white truncate">{exp.title}</p>
+                                <p className="text-[10px] text-text-muted mt-0.5 truncate">
+                                  {exp.category} • {exp.frequency} • {exp.date}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-xs font-bold text-red-400">
+                                  ₹{exp.amount.toLocaleString('en-IN')}
+                                </span>
+                                <ArrowRight className="w-3.5 h-3.5 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Quick Pages */}
+                    {searchResults.pages.length > 0 && (
+                      <div className="p-2">
+                        <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                          Quick Navigation
+                        </div>
+                        <div className="space-y-0.5 mt-1">
+                          {searchResults.pages.map((page) => {
+                            const Icon = page.icon
+                            return (
+                              <button
+                                key={page.id}
+                                type="button"
+                                onClick={() => handleSelectSearchResult(page.id)}
+                                className="w-full px-2.5 py-2 rounded-xl hover:bg-card-hover transition-colors text-left flex items-center justify-between gap-2 group"
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className="p-1.5 rounded-lg bg-background border border-border text-accent">
+                                    <Icon className="w-3.5 h-3.5" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-semibold text-white">{page.label}</p>
+                                    <p className="text-[10px] text-text-muted truncate">{page.desc}</p>
+                                  </div>
+                                </div>
+                                <ArrowRight className="w-3.5 h-3.5 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+              {searchResults.totalCount > 0 && (
+                <div className="px-3 py-2 bg-background/80 border-t border-border text-[10px] text-text-muted flex items-center justify-between">
+                  <span>Press <kbd className="px-1 py-0.5 bg-card border border-border rounded font-mono">Enter</kbd> to jump to top match</span>
+                  <span><kbd className="px-1 py-0.5 bg-card border border-border rounded font-mono">Esc</kbd> to close</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
