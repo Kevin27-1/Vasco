@@ -1,14 +1,14 @@
 import { useState } from 'react'
-import { 
-  Eye, 
-  EyeOff, 
-  Lock, 
-  Mail, 
-  AlertCircle, 
-  RefreshCw, 
-  ShieldCheck 
+import {
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  AlertCircle,
+  RefreshCw,
+  ShieldCheck
 } from 'lucide-react'
-import { loginWithCredentials, VALID_CREDENTIALS } from '../services/authService'
+import { loginWithCredentials } from '../services/authService'
 
 interface LoginProps {
   onLogin: () => void
@@ -42,12 +42,6 @@ export default function Login({ onLogin }: LoginProps) {
     }
   }
 
-  const handleQuickFill = () => {
-    setEmail(VALID_CREDENTIALS.email)
-    setPassword(VALID_CREDENTIALS.passwords[0])
-    setErrorMessage(null)
-  }
-
   return (
     <div className="min-h-screen bg-background flex flex-col justify-center py-10 sm:px-6 lg:px-8 selection:bg-accent selection:text-white">
       {/* Brand Header */}
@@ -75,7 +69,7 @@ export default function Login({ onLogin }: LoginProps) {
           <div className="mb-6">
             <h2 className="text-lg font-bold text-white">Administrator Login</h2>
             <p className="text-xs text-text-muted mt-0.5">
-              Enter your credentials to access the Vasco dashboard
+              Sign in with your Firebase administrator account
             </p>
           </div>
 
@@ -111,7 +105,7 @@ export default function Login({ onLogin }: LoginProps) {
                     if (errorMessage) setErrorMessage(null)
                   }}
                   className="block w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-xl text-white placeholder-text-muted text-sm focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
-                  placeholder="vascotreadskgm@gmail.com"
+                  placeholder="Enter admin email"
                 />
               </div>
             </div>
@@ -156,7 +150,7 @@ export default function Login({ onLogin }: LoginProps) {
               </div>
             </div>
 
-            {/* Remember me & Quick Fill */}
+            {/* Remember me */}
             <div className="flex items-center justify-between pt-1">
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
@@ -171,14 +165,6 @@ export default function Login({ onLogin }: LoginProps) {
                   Remember me
                 </span>
               </label>
-
-              <button
-                type="button"
-                onClick={handleQuickFill}
-                className="text-xs text-amber-400 hover:text-amber-300 font-medium transition-colors"
-              >
-                Auto-fill Login
-              </button>
             </div>
 
             {/* Submit Button */}
@@ -199,24 +185,6 @@ export default function Login({ onLogin }: LoginProps) {
               </button>
             </div>
           </form>
-
-          {/* Preset Credentials Hint Box */}
-          <div className="mt-6 pt-5 border-t border-border/60">
-            <div className="p-3 rounded-xl bg-background border border-border/80 text-[11px] text-text-muted space-y-1">
-              <div className="font-semibold text-white flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Authorized Admin Credentials</span>
-              </div>
-              <div className="flex justify-between items-center pt-1 font-mono">
-                <span className="text-text-muted">Email:</span>
-                <span className="text-text-main selection:bg-white/10">{VALID_CREDENTIALS.email}</span>
-              </div>
-              <div className="flex justify-between items-center font-mono">
-                <span className="text-text-muted">Password:</span>
-                <span className="text-text-main selection:bg-white/10">{VALID_CREDENTIALS.passwords[0]}</span>
-              </div>
-            </div>
-          </div>
         </div>
 
         <p className="mt-4 text-center text-[11px] text-text-muted">

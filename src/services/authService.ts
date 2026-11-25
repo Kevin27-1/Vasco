@@ -1,58 +1,38 @@
 import { auth } from '../lib/firebase'
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut as firebaseSignOut 
+import {
+  browserLocalPersistence,
+  browserSessionPersistence,
+  onAuthStateChanged,
+  setPersistence,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  type User
 } from 'firebase/auth'
 
-export interface UserSession {
-  email: string
-  name: string
-  role: string
-  loginTime: string
-}
-
-// Configured Administrator Credentials
-export const VALID_CREDENTIALS = {
-  email: 'vascotreadskgm@gmail.com',
-  // Accepts both Vasco@2023 and isVasco@2023 to protect against typo
-  passwords: ['Vasco@2023', 'isVasco@2023']
-}
-
-export const AUTH_STORAGE_KEY = 'vasco_auth_session'
+const LEGACY_AUTH_STORAGE_KEY = 'vasco_auth_session'
 
 /**
- * Retrieve active authenticated session from localStorage or sessionStorage
+ * Subscribe to Firebase Authentication state changes.
+ * Returns an unsubscribe function.
  */
-export function getStoredSession(): UserSession | null {
-  try {
-    const local = localStorage.getItem(AUTH_STORAGE_KEY)
-    if (local) return JSON.parse(local)
-    const session = sessionStorage.getItem(AUTH_STORAGE_KEY)
-    if (session) return JSON.parse(session)
-  } catch (err) {
-    console.error('Failed to read auth session:', err)
-  }
-  return null
+export function subscribeToAuthState(
+  callback: (user: User | null) => void
+): () => void {
+  return onAuthStateChanged(auth, (user) => {
+    callback(user)
+  })
 }
 
 /**
- * Check if user is currently authenticated
- */
-export function checkIsAuthenticated(): boolean {
-  return !!getStoredSession()
-}
-
-/**
- * Validate and authenticate admin user credentials
+ * Authenticate administrator using Firebase Email/Password Auth.
  */
 export async function loginWithCredentials(
   emailInput: string,
   passwordInput: string,
   rememberMe: boolean = true
-): Promise<{ success: boolean; error?: string; user?: UserSession }> {
-  const email = emailInput.trim().toLowerCase()
-  const password = passwordInput.trim()
+): Promise<{ success: boolean; error?: string; user?: User }> {
+  const email = emailInput.trim()
+  const password = passwordInput
 
   if (!email) {
     return { success: false, error: 'Please enter your email address.' }
@@ -61,68 +41,52 @@ export async function loginWithCredentials(
     return { success: false, error: 'Please enter your password.' }
   }
 
-  // Check against authorized credentials
-  const isEmailMatch = email === VALID_CREDENTIALS.email.toLowerCase()
-  const isPasswordMatch = VALID_CREDENTIALS.passwords.includes(password)
-
-  // Also attempt Firebase Auth if available/configured
-  let firebaseAuthSuccess = false
-  if (auth) {
-    try {
-      await signInWithEmailAndPassword(auth, email, password)
-      firebaseAuthSuccess = true
-    } catch (fbErr: any) {
-      // If user doesn't exist in Firebase Auth yet, try creating it if credentials match
-      if (isEmailMatch && isPasswordMatch && (fbErr.code === 'auth/user-not-found' || fbErr.code === 'auth/invalid-credential')) {
-        try {
-          await createUserWithEmailAndPassword(auth, email, password)
-          firebaseAuthSuccess = true
-        } catch {}
+  try {
+    await setPersistence(
+      auth,
+      rememberMe ? browserLocalPersistence : browserSessionPersistence
+    )
+    const credential = await signInWithEmailAndPassword(auth, email, password)
+    return { success: true, user: credential.user }
+  } catch (err: any) {
+    const code = err?.code || ''
+    if (
+      code === 'auth/invalid-credential' ||
+      code === 'auth/wrong-password' ||
+      code === 'auth/user-not-found'
+    ) {
+      return {
+        success: false,
+        error: 'Invalid email or password. Please verify your credentials and try again.'
       }
     }
-  }
-
-  if (firebaseAuthSuccess || (isEmailMatch && isPasswordMatch)) {
-    const session: UserSession = {
-      email: VALID_CREDENTIALS.email,
-      name: 'Vasco Admin',
-      role: 'Administrator',
-      loginTime: new Date().toISOString()
+    if (code === 'auth/invalid-email') {
+      return {
+        success: false,
+        error: 'Please enter a valid email address.'
+      }
     }
-
-    const serialized = JSON.stringify(session)
-    if (rememberMe) {
-      localStorage.setItem(AUTH_STORAGE_KEY, serialized)
-    } else {
-      sessionStorage.setItem(AUTH_STORAGE_KEY, serialized)
+    if (code === 'auth/too-many-requests') {
+      return {
+        success: false,
+        error: 'Too many failed login attempts. Please wait a few minutes and try again.'
+      }
     }
-
-    return { success: true, user: session }
-  }
-
-  if (!isEmailMatch) {
     return {
       success: false,
-      error: 'Invalid email address. Access is restricted to authorized Vasco Treads administrators.'
+      error: err?.message || 'Authentication failed. Please try again.'
     }
-  }
-
-  return {
-    success: false,
-    error: 'Incorrect password. Please verify your password and try again.'
   }
 }
 
 /**
- * Sign out and clear stored session
+ * Sign out of Firebase Auth and clean up any legacy local storage session keys.
  */
-export function logout(): void {
+export async function logout(): Promise<void> {
   try {
-    localStorage.removeItem(AUTH_STORAGE_KEY)
-    sessionStorage.removeItem(AUTH_STORAGE_KEY)
-    if (auth && auth.currentUser) {
-      firebaseSignOut(auth).catch(() => {})
-    }
+    localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY)
+    sessionStorage.removeItem(LEGACY_AUTH_STORAGE_KEY)
+    await firebaseSignOut(auth)
   } catch (err) {
     console.error('Error during logout:', err)
   }

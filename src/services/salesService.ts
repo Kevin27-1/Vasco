@@ -138,6 +138,18 @@ export interface CreateSaleParams {
 }
 
 export async function createSale(params: CreateSaleParams): Promise<SaleRecord> {
+  if (!Array.isArray(params.items) || params.items.length === 0) {
+    throw new Error('At least one tyre item is required to create a sale.')
+  }
+  for (const item of params.items) {
+    if (!Number.isFinite(item.qty) || item.qty <= 0) {
+      throw new Error('Item quantity must be greater than zero.')
+    }
+    if (!Number.isFinite(item.price) || item.price < 0) {
+      throw new Error('Item price cannot be negative.')
+    }
+  }
+
   const itemsSubtotal = params.items.reduce((sum, item) => sum + item.price * item.qty, 0)
   const isCredit = params.paymentMethod === 'Credit' || !!params.isCreditSale
   const interestType = params.interestType || 'percentage'
@@ -147,15 +159,24 @@ export async function createSale(params: CreateSaleParams): Promise<SaleRecord> 
   if (isCredit) {
     if (interestType === 'fixed') {
       interestAmount = params.interestAmount !== undefined ? Number(params.interestAmount) : 0
+      if (!Number.isFinite(interestAmount) || interestAmount < 0) {
+        throw new Error('Interest amount cannot be negative.')
+      }
       interestRate = itemsSubtotal > 0 ? Number(((interestAmount / itemsSubtotal) * 100).toFixed(2)) : 0
     } else {
       interestRate = Number(params.interestRate || 0)
+      if (!Number.isFinite(interestRate) || interestRate < 0) {
+        throw new Error('Interest rate cannot be negative.')
+      }
       interestAmount = params.interestAmount !== undefined ? Number(params.interestAmount) : Math.round((itemsSubtotal * interestRate) / 100)
     }
   }
 
   const totalAmount = itemsSubtotal + interestAmount
   const amountPaidNow = isCredit ? Number(params.amountPaidNow || 0) : totalAmount
+  if (!Number.isFinite(amountPaidNow) || amountPaidNow < 0) {
+    throw new Error('Amount paid cannot be negative.')
+  }
   const remainingDue = isCredit ? Math.max(0, totalAmount - amountPaidNow) : 0
   const dueDate = isCredit ? (params.dueDate || '') : ''
   const creditStatus: 'Pending' | 'Partially Paid' | 'Paid' | 'Overdue' | undefined = isCredit
@@ -259,6 +280,9 @@ export async function recordCreditPayment(
   paymentMethod: string = 'Cash',
   notes?: string
 ): Promise<void> {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('Payment amount must be greater than zero.')
+  }
   const saleDocRef = doc(db, SALES_COLLECTION, saleId)
   await runTransaction(db, async (transaction) => {
     const snap = await transaction.get(saleDocRef)

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   LayoutDashboard, 
   PackageSearch, 
@@ -14,14 +14,23 @@ import Login from './screens/Login'
 import Sales from './screens/Sales'
 import Expenses from './screens/Expenses'
 import Settings from './screens/Settings'
-import { checkIsAuthenticated, logout } from './services/authService'
+import { subscribeToAuthState, logout } from './services/authService'
 import { cn } from './lib/utils'
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => checkIsAuthenticated())
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [isAuthLoading, setIsAuthLoading] = useState(true)
   const [activeScreen, setActiveScreen] = useState('dashboard')
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [externalSearch, setExternalSearch] = useState<{ query: string; key: number } | null>(null)
+
+  useEffect(() => {
+    const unsubscribe = subscribeToAuthState((user) => {
+      setIsAuthenticated(!!user)
+      setIsAuthLoading(false)
+    })
+    return () => unsubscribe()
+  }, [])
 
   const handleNavigate = (screen: string, searchFilter?: string) => {
     setActiveScreen(screen)
@@ -30,9 +39,20 @@ function App() {
     }
   }
 
-  const handleLogout = () => {
-    logout()
+  const handleLogout = async () => {
+    await logout()
     setIsAuthenticated(false)
+  }
+
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-accent border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs text-text-muted">Verifying session...</p>
+        </div>
+      </div>
+    )
   }
 
   if (!isAuthenticated) {

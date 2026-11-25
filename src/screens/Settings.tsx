@@ -84,17 +84,23 @@ export default function Settings() {
     }
   }
 
+  const escapeCsvCell = (value: unknown): string => {
+    const str = String(value ?? '')
+    const safe = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str
+    return `"${safe.replace(/"/g, '""')}"`
+  }
+
   const handleExportStockCSV = () => {
     subscribeToStock((items) => {
       const headers = ['Brand', 'Model', 'Size', 'TyreType', 'Qty', 'PurchasePrice', 'Status']
       const rows = items.map(i => [
-        `"${i.brand}"`,
-        `"${i.model}"`,
-        `"${i.size}"`,
-        `"${i.tyreType || 'Tubeless + Radial'}"`,
-        i.qty,
-        i.purchasePrice,
-        `"${i.status}"`
+        escapeCsvCell(i.brand),
+        escapeCsvCell(i.model),
+        escapeCsvCell(i.size),
+        escapeCsvCell(i.tyreType || 'Tubeless + Radial'),
+        escapeCsvCell(i.qty),
+        escapeCsvCell(i.purchasePrice),
+        escapeCsvCell(i.status)
       ])
       const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n')
       const encodedUri = encodeURI(csvContent)
@@ -111,15 +117,15 @@ export default function Settings() {
     subscribeToSales((sales) => {
       const headers = ['InvoiceNumber', 'CustomerName', 'Phone', 'VehiclePlate', 'Date', 'TyreTypes', 'TotalAmount', 'PaymentMethod', 'ItemsCount']
       const rows = sales.map(s => [
-        `"${s.invoiceNumber}"`,
-        `"${s.customerName}"`,
-        `"${s.customerPhone}"`,
-        `"${s.vehicleNumber || ''}"`,
-        `"${s.date}"`,
-        `"${s.items?.map(it => it.tyreType).filter(Boolean).join('; ') || ''}"`,
-        s.totalAmount,
-        `"${s.paymentMethod || 'Cash'}"`,
-        s.items?.length || 0
+        escapeCsvCell(s.invoiceNumber),
+        escapeCsvCell(s.customerName),
+        escapeCsvCell(s.customerPhone),
+        escapeCsvCell(s.vehicleNumber || ''),
+        escapeCsvCell(s.date),
+        escapeCsvCell(s.items?.map(it => it.tyreType).filter(Boolean).join('; ') || ''),
+        escapeCsvCell(s.totalAmount),
+        escapeCsvCell(s.paymentMethod || 'Cash'),
+        escapeCsvCell(s.items?.length || 0)
       ])
       const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n')
       const encodedUri = encodeURI(csvContent)
