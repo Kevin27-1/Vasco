@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Search, Edit2, X, Check, Trash2, RefreshCw, Database, CheckCircle2, FileText } from 'lucide-react'
 import { PDFDownloadLink } from '@react-pdf/renderer'
 import { InvoicePDF } from '../components/InvoicePDF'
+import ConfirmModal from '../components/ConfirmModal'
 import { cn } from '../lib/utils'
 import {
   type StockItem,
@@ -37,6 +38,8 @@ export default function StockManagement({ externalSearch }: StockManagementProps
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successNotice, setSuccessNotice] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<StockItem | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Sell Stock modal state (triggered via tick mark)
   const [sellingItem, setSellingItem] = useState<StockItem | null>(null)
@@ -222,13 +225,18 @@ export default function StockManagement({ externalSearch }: StockManagementProps
     }
   }
 
-  const handleDeleteItem = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this tyre item from Firebase?')) {
-      try {
-        await deleteStockItem(id)
-      } catch (err) {
-        console.error('Failed to delete item:', err)
-      }
+  const handleConfirmDeleteItem = async () => {
+    if (!deleteTarget) return
+    setIsDeleting(true)
+    try {
+      await deleteStockItem(deleteTarget.id)
+      setDeleteTarget(null)
+    } catch (err: any) {
+      console.error('Failed to delete item:', err)
+      setErrorMsg(err?.message || 'Failed to delete tyre item from Firebase')
+      setDeleteTarget(null)
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -394,7 +402,7 @@ export default function StockManagement({ externalSearch }: StockManagementProps
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button 
-                        onClick={() => handleDeleteItem(item.id)}
+                        onClick={() => setDeleteTarget(item)}
                         className="p-2 text-text-muted hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
                         title="Delete Item"
                       >
@@ -1086,6 +1094,17 @@ export default function StockManagement({ externalSearch }: StockManagementProps
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title="Delete Tyre Stock?"
+        message="Are you sure you want to permanently delete this tyre item from inventory? This action cannot be undone."
+        detail={deleteTarget ? `${deleteTarget.brand} ${deleteTarget.model} (${deleteTarget.size}) • ${deleteTarget.qty} units` : undefined}
+        confirmLabel="Delete Stock"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDeleteItem}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   )
 }

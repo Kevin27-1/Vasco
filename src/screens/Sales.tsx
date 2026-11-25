@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { PDFDownloadLink } from '@react-pdf/renderer'
 import { InvoicePDF } from '../components/InvoicePDF'
+import ConfirmModal from '../components/ConfirmModal'
 import {
   type SaleRecord,
   type SaleItemDetail,
@@ -71,6 +72,8 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
     }
   }, [externalSearch])
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<SaleRecord | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Tab View: 'all' = All Invoices, 'credit' = Credit & Dues
   const [activeTab, setActiveTab] = useState<'all' | 'credit'>('all')
@@ -358,13 +361,18 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
     }
   }
 
-  const handleDeleteSale = async (id: string) => {
-    if (window.confirm('Delete this invoice record from Firebase?')) {
-      try {
-        await deleteSale(id)
-      } catch (err) {
-        console.error('Failed to delete sale:', err)
-      }
+  const handleConfirmDeleteSale = async () => {
+    if (!deleteTarget) return
+    setIsDeleting(true)
+    try {
+      await deleteSale(deleteTarget.id)
+      setDeleteTarget(null)
+    } catch (err: any) {
+      console.error('Failed to delete sale:', err)
+      setErrorMessage(err?.message || 'Failed to delete invoice record from Firebase.')
+      setDeleteTarget(null)
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -734,7 +742,7 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
                             </PDFDownloadLink>
 
                             <button
-                              onClick={() => handleDeleteSale(sale.id)}
+                              onClick={() => setDeleteTarget(sale)}
                               className="inline-flex p-2 text-text-muted hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
                               title="Delete Invoice"
                             >
@@ -910,7 +918,7 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
                               <FileText className="w-4 h-4" />
                             </PDFDownloadLink>
                             <button
-                              onClick={() => handleDeleteSale(sale.id)}
+                              onClick={() => setDeleteTarget(sale)}
                               className="inline-flex p-2 text-text-muted hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
                               title="Delete Sale"
                             >
@@ -1528,6 +1536,17 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title="Delete Invoice Record?"
+        message="Are you sure you want to permanently delete this invoice from Firebase? This action cannot be undone."
+        detail={deleteTarget ? `#${deleteTarget.invoiceNumber} • ${deleteTarget.customerName} (₹${deleteTarget.totalAmount.toLocaleString('en-IN')})` : undefined}
+        confirmLabel="Delete Invoice"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDeleteSale}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   )
 }
