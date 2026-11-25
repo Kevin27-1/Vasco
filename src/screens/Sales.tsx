@@ -14,7 +14,8 @@ import {
   Clock,
   Users,
   Check,
-  Coins
+  Coins,
+  MessageSquare
 } from 'lucide-react'
 import { PDFDownloadLink } from '@react-pdf/renderer'
 import { InvoicePDF } from '../components/InvoicePDF'
@@ -383,6 +384,16 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
     setCollectNotes('')
   }
 
+  const handleSendOverdueMessage = (sale: SaleRecord, due: number, daysOverdue: number) => {
+    const message = `Hello ${sale.customerName || 'Customer'}, your Vasco Treads invoice #${sale.invoiceNumber} (Due date: ${sale.dueDate}) has become overdue by ${daysOverdue} day(s). Remaining balance due: ₹${due.toLocaleString('en-IN')}. Please arrange payment at your earliest convenience. Thank you!`
+    const digits = (sale.customerPhone || '').replace(/\D/g, '')
+    const phoneParam = digits.length === 10 ? `91${digits}` : digits
+    const url = phoneParam
+      ? `https://wa.me/${phoneParam}?text=${encodeURIComponent(message)}`
+      : `https://wa.me/?text=${encodeURIComponent(message)}`
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
   const handleConfirmCollectPayment = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!collectingSale) return
@@ -705,6 +716,17 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
                         </td>
                         <td className="px-5 py-4 text-right">
                           <div className="flex justify-end items-center gap-2">
+                            {due > 0 && timing.isOverdue && (
+                              <button
+                                onClick={() => handleSendOverdueMessage(sale, due, timing.days)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-red-400 bg-red-500/10 hover:bg-red-500 hover:text-white rounded-lg border border-red-500/30 transition-all shadow-sm"
+                                title="Send overdue reminder message via WhatsApp"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                                <span>Remind</span>
+                              </button>
+                            )}
+
                             {due > 0 && (
                               <button
                                 onClick={() => handleOpenCollectModal(sale)}

@@ -32,11 +32,12 @@ interface TopbarProps {
 
 interface NotificationItem {
   id: string;
-  type: 'out-of-stock' | 'low-stock' | 'sale' | 'system';
+  type: 'overdue-sale' | 'out-of-stock' | 'low-stock' | 'sale' | 'system';
   title: string;
   desc: string;
   time: string;
   targetScreen: 'stock' | 'sales' | 'settings';
+  searchFilter?: string;
 }
 
 export default function Topbar({ onOpenMobileMenu, onNavigate, onLogout }: TopbarProps) {
@@ -55,6 +56,7 @@ export default function Topbar({ onOpenMobileMenu, onNavigate, onLogout }: Topba
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false)
   const [notifFilter, setNotifFilter] = useState<'all' | 'alerts' | 'sales'>('all')
+  const [isOverdueToastDismissed, setIsOverdueToastDismissed] = useState(false)
 
   // Global search state
   const [searchQuery, setSearchQuery] = useState('')
@@ -241,9 +243,40 @@ export default function Topbar({ onOpenMobileMenu, onNavigate, onLogout }: Topba
     }
   }
 
+  // Overdue credit sales (due date passed and balance remaining)
+  const overdueSales = useMemo(() => {
+    const today = new Intl.DateTimeFormat('en-CA').format(new Date())
+    const todayMs = new Date(today).getTime()
+    return sales
+      .filter((s) => {
+        const isCredit = s.paymentMethod === 'Credit' || s.isCreditSale
+        const due = Number(s.remainingDue ?? Math.max(0, s.totalAmount - (s.amountPaidNow || 0)))
+        return isCredit && due > 0 && !!s.dueDate && s.dueDate < today
+      })
+      .map((s) => {
+        const due = Number(s.remainingDue ?? Math.max(0, s.totalAmount - (s.amountPaidNow || 0)))
+        const dueMs = new Date(s.dueDate!).getTime()
+        const daysOverdue = Math.max(1, Math.ceil((todayMs - dueMs) / (1000 * 60 * 60 * 24)))
+        return { sale: s, due, daysOverdue }
+      })
+  }, [sales])
+
   // Generate real notifications from inventory & sales
   const notifications: NotificationItem[] = useMemo(() => {
     const list: NotificationItem[] = []
+
+    // 0. Overdue Credit Sales (highest priority)
+    overdueSales.forEach(({ sale: s, due, daysOverdue }) => {
+      list.push({
+        id: `overdue-${s.id}`,
+        type: 'overdue-sale',
+        title: `Sale Overdue: #${s.invoiceNumber}`,
+        desc: `${s.customerName || 'Customer'}${s.vehicleNumber ? ` (${s.vehicleNumber})` : ''} • ₹${due.toLocaleString('en-IN')} due (Due ${s.dueDate})`,
+        time: `${daysOverdue}d overdue`,
+        targetScreen: 'sales',
+        searchFilter: s.invoiceNumber
+      })
+    })
 
     // 1. Out of stock tyre items
     stock.filter(item => item.qty === 0 || item.status === 'Sold').forEach(item => {
@@ -292,17 +325,21 @@ export default function Topbar({ onOpenMobileMenu, onNavigate, onLogout }: Topba
     })
 
     return list
-  }, [stock, sales])
+  }, [stock, sales, overdueSales])
 
   const filteredNotifications = useMemo(() => {
     if (notifFilter === 'alerts') {
-      return notifications.filter(n => n.type === 'low-stock' || n.type === 'out-of-stock')
+      return notifications.filter(n => n.type === 'overdue-sale' || n.type === 'low-stock' || n.type === 'out-of-stock')
     }
     if (notifFilter === 'sales') {
-      return notifications.filter(n => n.type === 'sale')
+      return notifications.filter(n => n.type === 'sale' || n.type === 'overdue-sale')
     }
     return notifications
   }, [notifications, notifFilter])
+
+  const unreadOverdueNotifications = useMemo(() => {
+    return notifications.filter(n => n.type === 'overdue-sale' && !readNotifIds.includes(n.id))
+  }, [notifications, readNotifIds])
 
   const unreadCount = useMemo(() => {
     return notifications.filter(n => !readNotifIds.includes(n.id)).length
@@ -326,7 +363,7 @@ export default function Topbar({ onOpenMobileMenu, onNavigate, onLogout }: Topba
     }
     setIsNotificationsOpen(false)
     if (onNavigate) {
-      onNavigate(item.targetScreen)
+      onNavigate(item.targetScreen, item.searchFilter)
     }
   }
 
@@ -735,6 +772,11 @@ export default function Topbar({ onOpenMobileMenu, onNavigate, onLogout }: Topba
                       >
                         {/* Icon */}
                         <div className="shrink-0 mt-0.5">
+                          {item.type === 'overdue-sale' && (
+                            <div className="w-7 h-7 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center ring-1 ring-red-500/30">
+                              <AlertCircle className="w-4 h-4" />
+                            </div>
+                          )}
                           {item.type === 'out-of-stock' && (
                             <div className="w-7 h-7 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center">
                               <AlertCircle className="w-4 h-4" />
@@ -1008,6 +1050,59 @@ export default function Topbar({ onOpenMobileMenu, onNavigate, onLogout }: Topba
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Automatic Overdue Sale Alert Message Toast */}
+      {!isOverdueToastDismissed && unreadOverdueNotifications.length > 0 && (
+        <div className="fixed bottom-20 md:bottom-5 right-4 z-50 max-w-sm w-[calc(100%-2rem)] bg-card border border-red-500/40 rounded-2xl shadow-2xl p-4 animate-in slide-in-from-bottom-4 fade-in duration-200">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-red-500/15 text-red-400 border border-red-500/25 shrink-0">
+              <AlertCircle className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-xs font-bold text-red-400 uppercase tracking-wide">
+                  {unreadOverdueNotifications.length === 1
+                    ? 'Sale Payment Overdue'
+                    : `${unreadOverdueNotifications.length} Sales Became Overdue`}
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setIsOverdueToastDismissed(true)}
+                  className="text-text-muted hover:text-white p-0.5 rounded"
+                  title="Dismiss"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <p className="text-xs text-white font-medium mt-1">
+                {unreadOverdueNotifications[0].title}
+              </p>
+              <p className="text-[11px] text-text-muted mt-0.5 leading-relaxed">
+                {unreadOverdueNotifications[0].desc}
+              </p>
+              <div className="flex items-center gap-2 mt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOverdueToastDismissed(true)
+                    handleNotificationClick(unreadOverdueNotifications[0])
+                  }}
+                  className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-[11px] font-semibold rounded-lg transition-colors"
+                >
+                  View Overdue Sale
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsOverdueToastDismissed(true)}
+                  className="px-2.5 py-1.5 bg-background hover:bg-card-hover border border-border text-text-muted hover:text-white text-[11px] font-medium rounded-lg transition-colors"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
