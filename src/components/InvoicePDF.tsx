@@ -275,18 +275,18 @@ export const InvoicePDF = ({
           {/* Table Body */}
           <View style={styles.tableContainer}>
             {items.map((item, index) => {
-              const baseRate = item.price / 1.18;
-              const amount = baseRate * item.qty;
+              const ratePerUnit = Number(item.price) || 0;
+              const amount = ratePerUnit * (Number(item.qty) || 0);
               return (
                 <View style={styles.tableRow} key={index}>
                   <Text style={styles.tableColSlBody}>{index + 1}</Text>
                   <Text style={styles.tableColHSNBody}></Text>
                   <Text style={styles.tableColNameBody}>
-                    {item.brand} {item.model} ({item.size})
+                    {item.brand} {item.model} ({item.size}){item.tyreType ? ` - ${item.tyreType}` : ''}
                   </Text>
                   <Text style={styles.tableColUOMBody}>NOS</Text>
                   <Text style={styles.tableColQtyBody}>{item.qty}</Text>
-                  <Text style={styles.tableColRateBody}>{baseRate.toFixed(2)}</Text>
+                  <Text style={styles.tableColRateBody}>{ratePerUnit.toFixed(2)}</Text>
                   <Text style={styles.tableColAmountBody}>{amount.toFixed(2)}</Text>
                 </View>
               )
@@ -335,7 +335,7 @@ export const InvoicePDF = ({
             <View style={styles.totalsRight}>
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Total</Text>
-                <Text style={styles.totalValue}>{taxableValue.toFixed(2)}</Text>
+                <Text style={styles.totalValue}>{goodsSubtotal.toFixed(2)}</Text>
               </View>
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Discount %</Text>
