@@ -318,7 +318,11 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
     }
   }
 
-  const modalTotalPayable = modalItemsSubtotal + modalInterestAmount
+  const modalGstAmount = useMemo(() => {
+    return Number((modalItemsSubtotal * 0.18).toFixed(2))
+  }, [modalItemsSubtotal])
+
+  const modalTotalPayable = Math.round(modalItemsSubtotal + modalGstAmount + modalInterestAmount)
   const modalPaidNow = paymentMethod === 'Credit' ? Number(amountPaidNow) || 0 : modalTotalPayable
   const modalRemainingDue = Math.max(0, modalTotalPayable - modalPaidNow)
 
@@ -1608,25 +1612,43 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
                 })}
               </div>
 
-              {/* Total Amount Preview */}
+              {/* Total Amount Preview (with GST) */}
               {saleItems.some((i) => i.stockId) && (
-                <div className="mt-4 p-4 bg-background border border-border rounded-xl flex justify-between items-center">
-                  <div>
-                    <span className="text-text-muted text-xs block">
-                      {paymentMethod === 'Credit' ? 'Total Payable (w/ interest):' : 'Total Amount:'}
-                    </span>
-                    <span className="text-xl font-bold text-emerald-400">
-                      ₹{modalTotalPayable.toLocaleString('en-IN')}
-                    </span>
+                <div className="mt-4 p-4 bg-background border border-border rounded-xl space-y-2.5">
+                  <div className="space-y-1 text-xs border-b border-border/70 pb-2.5">
+                    <div className="flex justify-between text-text-muted">
+                      <span>Subtotal (Excl. GST)</span>
+                      <span className="font-mono text-white">₹{modalItemsSubtotal.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-text-muted">
+                      <span>GST 18% (CGST 9% + SGST 9%)</span>
+                      <span className="font-mono text-amber-400">+₹{modalGstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    {paymentMethod === 'Credit' && modalInterestAmount > 0 && (
+                      <div className="flex justify-between text-text-muted">
+                        <span>Credit Interest</span>
+                        <span className="font-mono text-amber-400">+₹{modalInterestAmount.toLocaleString('en-IN')}</span>
+                      </div>
+                    )}
                   </div>
-                  {paymentMethod === 'Credit' && (
-                    <div className="text-right">
-                      <span className="text-text-muted text-xs block">Balance Due:</span>
-                      <span className="text-base font-bold text-amber-400 font-mono">
-                        ₹{modalRemainingDue.toLocaleString('en-IN')}
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="text-text-muted text-xs block">
+                        {paymentMethod === 'Credit' ? 'Total Payable (Incl. GST & Interest):' : 'Total Amount (Incl. GST):'}
+                      </span>
+                      <span className="text-xl font-bold text-emerald-400">
+                        ₹{modalTotalPayable.toLocaleString('en-IN')}
                       </span>
                     </div>
-                  )}
+                    {paymentMethod === 'Credit' && (
+                      <div className="text-right">
+                        <span className="text-text-muted text-xs block">Balance Due:</span>
+                        <span className="text-base font-bold text-amber-400 font-mono">
+                          ₹{modalRemainingDue.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 

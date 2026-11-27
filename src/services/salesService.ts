@@ -157,6 +157,8 @@ export async function createSale(params: CreateSaleParams): Promise<SaleRecord> 
   }
 
   const itemsSubtotal = params.items.reduce((sum, item) => sum + item.price * item.qty, 0)
+  const gstRate = 18
+  const gstAmount = Number((itemsSubtotal * (gstRate / 100)).toFixed(2))
   const isCredit = params.paymentMethod === 'Credit' || !!params.isCreditSale
   const interestType = params.interestType || 'percentage'
   let interestRate = 0
@@ -178,7 +180,7 @@ export async function createSale(params: CreateSaleParams): Promise<SaleRecord> 
     }
   }
 
-  const totalAmount = itemsSubtotal + interestAmount
+  const totalAmount = Math.round(itemsSubtotal + gstAmount + interestAmount)
   const amountPaidNow = isCredit ? Number(params.amountPaidNow || 0) : totalAmount
   if (!Number.isFinite(amountPaidNow) || amountPaidNow < 0) {
     throw new Error('Amount paid cannot be negative.')

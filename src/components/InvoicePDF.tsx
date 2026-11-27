@@ -182,10 +182,10 @@ export const InvoicePDF = ({
   const goodsSubtotal = items.reduce((acc, curr) => acc + (curr.qty * curr.price), 0);
   const isCredit = isCreditSale || paymentMethod === 'Credit';
   const calculatedInterest = isCredit ? (interestAmount || Math.round((goodsSubtotal * interestRate) / 100)) : 0;
-  const totalWithTax = goodsSubtotal + calculatedInterest;
-  const taxableValue = goodsSubtotal / 1.18;
+  const taxableValue = goodsSubtotal;
   const cgst = taxableValue * 0.09;
   const sgst = taxableValue * 0.09;
+  const totalWithTax = taxableValue + cgst + sgst + calculatedInterest;
   
   const totalAmountRounded = Math.round(totalWithTax);
   const roundOff = totalAmountRounded - totalWithTax;

@@ -764,10 +764,12 @@ export default function StockManagement({ externalSearch }: StockManagementProps
           (sum, t) => sum + (sellForm.typeSelections[t]?.selected ? sellForm.typeSelections[t].qty : 0),
           0
         )
-        const quickSellTotalAmount = TYRE_TYPES.reduce((sum, t) => {
+        const quickSellSubtotal = TYRE_TYPES.reduce((sum, t) => {
           const sel = sellForm.typeSelections[t]
           return sum + (sel?.selected ? sel.qty * sel.price : 0)
         }, 0)
+        const quickSellGst = Number((quickSellSubtotal * 0.18).toFixed(2))
+        const quickSellTotalAmount = Math.round(quickSellSubtotal + quickSellGst)
         const quickSellTotalProfit = TYRE_TYPES.reduce((sum, t) => {
           const sel = sellForm.typeSelections[t]
           if (!sel?.selected) return sum
@@ -1028,18 +1030,30 @@ export default function StockManagement({ externalSearch }: StockManagementProps
               </div>
 
               {/* Total & Profit Calculation Summary Box */}
-              <div className="p-3.5 rounded-xl bg-accent/5 border border-accent/20 flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-text-muted block">Total Sale Amount</span>
-                  <span className="text-xl font-bold text-accent">
-                    ₹{quickSellTotalAmount.toLocaleString('en-IN')}
-                  </span>
+              <div className="p-3.5 rounded-xl bg-accent/5 border border-accent/20 space-y-2">
+                <div className="space-y-1 text-xs border-b border-accent/15 pb-2">
+                  <div className="flex justify-between text-text-muted">
+                    <span>Subtotal (Excl. GST)</span>
+                    <span className="font-mono text-white">₹{quickSellSubtotal.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between text-text-muted">
+                    <span>GST 18% (CGST 9% + SGST 9%)</span>
+                    <span className="font-mono text-amber-400">+₹{quickSellGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <span className="text-xs text-text-muted block">Est. Profit</span>
-                  <span className="text-sm font-semibold text-emerald-400">
-                    +₹{quickSellTotalProfit.toLocaleString('en-IN')}
-                  </span>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs text-text-muted block">Total Sale Amount (Incl. GST)</span>
+                    <span className="text-xl font-bold text-accent">
+                      ₹{quickSellTotalAmount.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs text-text-muted block">Est. Profit (Before GST)</span>
+                    <span className="text-sm font-semibold text-emerald-400">
+                      +₹{quickSellTotalProfit.toLocaleString('en-IN')}
+                    </span>
+                  </div>
                 </div>
               </div>
 
