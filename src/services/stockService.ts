@@ -31,12 +31,24 @@ export interface TyreTypeQuantities {
   'Tube-Type + Radial': number
 }
 
+export type TyreTypePrices = Record<TyreType, number>
+
 export function defaultTypeQuantities(): TyreTypeQuantities {
   return {
     'Tubeless + Radial': 0,
     'Tubeless + Nylon': 0,
     'Tube-Type + Nylon': 0,
     'Tube-Type + Radial': 0
+  }
+}
+
+export function defaultTypePrices(defaultPrice = 0): TyreTypePrices {
+  const p = Math.max(0, Number(defaultPrice) || 0)
+  return {
+    'Tubeless + Radial': p,
+    'Tubeless + Nylon': p,
+    'Tube-Type + Nylon': p,
+    'Tube-Type + Radial': p
   }
 }
 
@@ -57,6 +69,19 @@ export function normalizeTypeQuantities(raw?: any, totalQty = 0): TyreTypeQuanti
   }
 }
 
+export function normalizeTypePrices(raw?: any, fallbackPrice = 0): TyreTypePrices {
+  const fb = Math.max(0, Number(fallbackPrice) || 0)
+  if (raw && typeof raw === 'object') {
+    return {
+      'Tubeless + Radial': Math.max(0, Number(raw['Tubeless + Radial'] ?? fb) || 0),
+      'Tubeless + Nylon': Math.max(0, Number(raw['Tubeless + Nylon'] ?? fb) || 0),
+      'Tube-Type + Nylon': Math.max(0, Number(raw['Tube-Type + Nylon'] ?? fb) || 0),
+      'Tube-Type + Radial': Math.max(0, Number(raw['Tube-Type + Radial'] ?? fb) || 0)
+    }
+  }
+  return defaultTypePrices(fb)
+}
+
 export function sumTypeQuantities(tq?: TyreTypeQuantities): number {
   if (!tq) return 0
   return (
@@ -65,6 +90,37 @@ export function sumTypeQuantities(tq?: TyreTypeQuantities): number {
     (Number(tq['Tube-Type + Nylon']) || 0) +
     (Number(tq['Tube-Type + Radial']) || 0)
   )
+}
+
+export function computeTypeValuation(
+  tq?: TyreTypeQuantities,
+  tp?: TyreTypePrices,
+  fallbackPrice = 0
+): number {
+  if (!tq) return 0
+  return TYRE_TYPES.reduce((sum, type) => {
+    const q = Math.max(0, Number(tq[type]) || 0)
+    const p = Math.max(0, Number(tp?.[type] ?? fallbackPrice) || 0)
+    return sum + q * p
+  }, 0)
+}
+
+export function computeWeightedPurchasePrice(
+  tq?: TyreTypeQuantities,
+  tp?: TyreTypePrices,
+  fallbackPrice = 0
+): number {
+  const totalQty = sumTypeQuantities(tq)
+  if (totalQty > 0) {
+    return Math.round(computeTypeValuation(tq, tp, fallbackPrice) / totalQty)
+  }
+  if (tp) {
+    const nonZero = TYRE_TYPES.map((t) => Number(tp[t]) || 0).filter((p) => p > 0)
+    if (nonZero.length > 0) {
+      return Math.round(nonZero.reduce((a, b) => a + b, 0) / nonZero.length)
+    }
+  }
+  return Math.max(0, Number(fallbackPrice) || 0)
 }
 
 export function deductTypeQuantities(current: TyreTypeQuantities, qtyToDeduct: number): TyreTypeQuantities {
@@ -97,6 +153,7 @@ export interface StockItem {
   size: string
   qty: number
   typeQuantities?: TyreTypeQuantities
+  typePrices?: TyreTypePrices
   tyreType?: TyreType | string
   purchasePrice: number
   sellingPrice?: number
@@ -127,9 +184,14 @@ export function subscribeToStock(
       const items: StockItem[] = snapshot.docs.map((docSnap) => {
         const data = docSnap.data()
         const rawQty = Number(data.qty) || 0
+        const rawPurchasePrice = Number(data.purchasePrice) || 0
         const typeQuantities = normalizeTypeQuantities(data.typeQuantities, rawQty)
+        const typePrices = normalizeTypePrices(data.typePrices, rawPurchasePrice)
         const computedQty = sumTypeQuantities(typeQuantities)
         const qty = computedQty > 0 || rawQty === 0 ? computedQty : rawQty
+        const purchasePrice = data.typePrices
+          ? computeWeightedPurchasePrice(typeQuantities, typePrices, rawPurchasePrice)
+          : rawPurchasePrice
         const minStockLevel = Number(data.minStockLevel) || 2
         return {
           id: docSnap.id,
@@ -137,8 +199,9 @@ export function subscribeToStock(
           model: data.model || '',
           size: data.size || '',
           typeQuantities,
+          typePrices,
           qty,
-          purchasePrice: Number(data.purchasePrice) || 0,
+          purchasePrice,
           sellingPrice: Number(data.sellingPrice) || 0,
           status: data.status || computeStatus(qty, minStockLevel),
           minStockLevel,
@@ -158,8 +221,10 @@ export function subscribeToStock(
 export async function addStockItem(item: Omit<StockItem, 'id' | 'status'> & { minStockLevel?: number }) {
   const minStock = item.minStockLevel ?? 2
   const normalizedTypes = item.typeQuantities ? normalizeTypeQuantities(item.typeQuantities) : normalizeTypeQuantities(undefined, item.qty)
+  const normalizedPrices = item.typePrices ? normalizeTypePrices(item.typePrices, item.purchasePrice) : defaultTypePrices(item.purchasePrice)
   const computedQty = sumTypeQuantities(normalizedTypes)
   const qty = computedQty > 0 ? computedQty : Math.max(0, Number(item.qty) || 0)
+  const purchasePrice = computeWeightedPurchasePrice(normalizedTypes, normalizedPrices, item.purchasePrice)
   const status = computeStatus(qty, minStock)
   const now = new Intl.DateTimeFormat('en-IN', {
     day: '2-digit',
@@ -175,7 +240,8 @@ export async function addStockItem(item: Omit<StockItem, 'id' | 'status'> & { mi
     size: item.size.trim(),
     qty,
     typeQuantities: normalizedTypes,
-    purchasePrice: Number(item.purchasePrice),
+    typePrices: normalizedPrices,
+    purchasePrice,
     minStockLevel: minStock,
     status,
     lastUpdated: now,
@@ -201,6 +267,11 @@ export async function updateStockItem(id: string, updates: Partial<StockItem>) {
   } else if ('qty' in updates) {
     const minStock = updates.minStockLevel ?? 2
     updatePayload.status = computeStatus(Number(updates.qty), minStock)
+  }
+
+  if ('typePrices' in updates && updates.typePrices) {
+    const tq = updates.typeQuantities
+    updatePayload.purchasePrice = computeWeightedPurchasePrice(tq, updates.typePrices, updates.purchasePrice || 0)
   }
 
   updatePayload.lastUpdated = new Intl.DateTimeFormat('en-IN', {
