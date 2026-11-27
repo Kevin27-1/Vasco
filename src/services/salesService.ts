@@ -197,45 +197,67 @@ export async function createSale(params: CreateSaleParams): Promise<SaleRecord> 
 
   // Use a Firestore transaction to update stock counts safely
   await runTransaction(db, async (transaction) => {
-    // 1. Check and decrement stock for each item if stockId is provided
+    // 1. Group deductions by stockId so all reads occur before writes and multi-type sales combine cleanly
+    const itemsByStockId = new Map<string, SaleItemDetail[]>()
     for (const item of params.items) {
       if (item.stockId) {
-        const stockDocRef = doc(db, STOCK_COLLECTION, item.stockId)
-        const stockSnap = await transaction.get(stockDocRef)
-
-        if (stockSnap.exists()) {
-          const currentData = stockSnap.data()
-          const currentQty = Number(currentData.qty) || 0
-          const minStock = Number(currentData.minStockLevel) || 2
-          const newQty = Math.max(0, currentQty - item.qty)
-          const newStatus = computeStatus(newQty, minStock)
-
-          const currentTypeQuantities = normalizeTypeQuantities(currentData.typeQuantities, currentQty)
-          const updatedTypeQuantities = deductTypeQuantities(currentTypeQuantities, item.qty, item.tyreType)
-          const currentTypePrices = normalizeTypePrices(
-            currentData.typePrices,
-            Number(currentData.purchasePrice) || 0
-          )
-          const updatedPurchasePrice = computeWeightedPurchasePrice(
-            updatedTypeQuantities,
-            currentTypePrices,
-            Number(currentData.purchasePrice) || 0
-          )
-
-          transaction.update(stockDocRef, {
-            qty: newQty,
-            typeQuantities: updatedTypeQuantities,
-            purchasePrice: updatedPurchasePrice,
-            status: newStatus,
-            lastUpdated: new Intl.DateTimeFormat('en-IN', {
-              day: '2-digit',
-              month: 'short',
-              hour: '2-digit',
-              minute: '2-digit'
-            }).format(new Date())
-          })
-        }
+        const list = itemsByStockId.get(item.stockId) || []
+        list.push(item)
+        itemsByStockId.set(item.stockId, list)
       }
+    }
+
+    // Read all referenced stock documents first
+    const stockSnapshots = new Map<string, { ref: ReturnType<typeof doc>; data: Record<string, any> }>()
+    for (const stockId of itemsByStockId.keys()) {
+      const stockDocRef = doc(db, STOCK_COLLECTION, stockId)
+      const stockSnap = await transaction.get(stockDocRef)
+      if (stockSnap.exists()) {
+        stockSnapshots.set(stockId, { ref: stockDocRef, data: stockSnap.data() })
+      }
+    }
+
+    const nowFormatted = new Intl.DateTimeFormat('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date())
+
+    // Apply all type deductions per stock document
+    for (const [stockId, stockItems] of itemsByStockId.entries()) {
+      const entry = stockSnapshots.get(stockId)
+      if (!entry) continue
+
+      const currentData = entry.data
+      const currentQty = Number(currentData.qty) || 0
+      const minStock = Number(currentData.minStockLevel) || 2
+      const totalDeducted = stockItems.reduce((sum, it) => sum + it.qty, 0)
+      const newQty = Math.max(0, currentQty - totalDeducted)
+      const newStatus = computeStatus(newQty, minStock)
+
+      let updatedTypeQuantities = normalizeTypeQuantities(currentData.typeQuantities, currentQty)
+      for (const it of stockItems) {
+        updatedTypeQuantities = deductTypeQuantities(updatedTypeQuantities, it.qty, it.tyreType)
+      }
+
+      const currentTypePrices = normalizeTypePrices(
+        currentData.typePrices,
+        Number(currentData.purchasePrice) || 0
+      )
+      const updatedPurchasePrice = computeWeightedPurchasePrice(
+        updatedTypeQuantities,
+        currentTypePrices,
+        Number(currentData.purchasePrice) || 0
+      )
+
+      transaction.update(entry.ref, {
+        qty: newQty,
+        typeQuantities: updatedTypeQuantities,
+        purchasePrice: updatedPurchasePrice,
+        status: newStatus,
+        lastUpdated: nowFormatted
+      })
     }
 
     // 2. Add the sale record

@@ -32,6 +32,40 @@ import {
 } from '../services/salesService'
 import { type StockItem, type TyreType, TYRE_TYPES, subscribeToStock } from '../services/stockService'
 
+type TypeSelectionMap = Record<TyreType, { selected: boolean; qty: number; price: number | '' }>
+
+interface SaleLineItem {
+  stockId: string
+  typeSelections: TypeSelectionMap
+}
+
+function createTypeSelections(stock?: StockItem): TypeSelectionMap {
+  const firstInStock = stock ? TYRE_TYPES.find((t) => (stock.typeQuantities?.[t] || 0) > 0) : undefined
+  const defaultPrice = stock?.sellingPrice && stock.sellingPrice > 0 ? stock.sellingPrice : ''
+  return {
+    'Tubeless + Radial': {
+      selected: firstInStock === 'Tubeless + Radial',
+      qty: 1,
+      price: defaultPrice
+    },
+    'Tubeless + Nylon': {
+      selected: firstInStock === 'Tubeless + Nylon',
+      qty: 1,
+      price: defaultPrice
+    },
+    'Tube-Type + Nylon': {
+      selected: firstInStock === 'Tube-Type + Nylon',
+      qty: 1,
+      price: defaultPrice
+    },
+    'Tube-Type + Radial': {
+      selected: firstInStock === 'Tube-Type + Radial',
+      qty: 1,
+      price: defaultPrice
+    }
+  }
+}
+
 function getDefaultDueDate(daysAhead = 30): string {
   const d = new Date()
   d.setDate(d.getDate() + daysAhead)
@@ -87,13 +121,8 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
   const [vehicleNumber, setVehicleNumber] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('UPI')
   const [saleDate, setSaleDate] = useState(new Intl.DateTimeFormat('en-CA').format(new Date()))
-  const [saleItems, setSaleItems] = useState<{
-    stockId: string
-    qty: number
-    price: number | ''
-    tyreType: TyreType | ''
-  }[]>([
-    { stockId: '', qty: 1, price: '', tyreType: '' }
+  const [saleItems, setSaleItems] = useState<SaleLineItem[]>([
+    { stockId: '', typeSelections: createTypeSelections() }
   ])
 
   // Credit Specific Form State
@@ -245,9 +274,15 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
 
   // Real-time computations in modal
   const modalItemsSubtotal = useMemo(() => {
-    return saleItems.reduce((acc, curr) => {
-      const p = typeof curr.price === 'number' ? curr.price : parseFloat(String(curr.price)) || 0
-      return acc + p * curr.qty
+    return saleItems.reduce((acc, item) => {
+      if (!item.stockId) return acc
+      const itemSum = TYRE_TYPES.reduce((sum, type) => {
+        const sel = item.typeSelections[type]
+        if (!sel?.selected) return sum
+        const p = typeof sel.price === 'number' ? sel.price : parseFloat(String(sel.price)) || 0
+        return sum + p * sel.qty
+      }, 0)
+      return acc + itemSum
     }, 0)
   }, [saleItems])
 
@@ -293,36 +328,45 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
     setErrorMessage(null)
 
     try {
-      const itemsToSave: SaleItemDetail[] = saleItems
-        .map((si) => {
-          const stockItem = availableStock.find((s) => s.id === si.stockId)
-          if (!stockItem) return null
-          const chosenType = (si.tyreType ||
-            TYRE_TYPES.find((t) => (stockItem.typeQuantities?.[t] || 0) > 0) ||
-            'Tubeless + Radial') as TyreType
-          const typeCostPrice = stockItem.typePrices?.[chosenType] ?? stockItem.purchasePrice
-          const unitPrice = typeof si.price === 'number' ? si.price : parseFloat(String(si.price)) || 0
-          return {
+      const itemsToSave: SaleItemDetail[] = []
+      for (const si of saleItems) {
+        const stockItem = availableStock.find((s) => s.id === si.stockId)
+        if (!stockItem) continue
+
+        for (const type of TYRE_TYPES) {
+          const sel = si.typeSelections[type]
+          if (!sel?.selected) continue
+          const availableForType = stockItem.typeQuantities?.[type] ?? 0
+          if (sel.qty <= 0 || (availableForType > 0 && sel.qty > availableForType)) {
+            setErrorMessage(
+              `Please enter a valid quantity (1 to ${availableForType || stockItem.qty}) for ${stockItem.brand} ${stockItem.model} (${type}).`
+            )
+            setIsSubmitting(false)
+            return
+          }
+          const unitPrice = typeof sel.price === 'number' ? sel.price : parseFloat(String(sel.price)) || 0
+          const typeCostPrice = stockItem.typePrices?.[type] ?? stockItem.purchasePrice
+          itemsToSave.push({
             stockId: stockItem.id,
             brand: stockItem.brand,
             model: stockItem.model,
             size: stockItem.size,
-            tyreType: chosenType,
-            qty: si.qty,
+            tyreType: type,
+            qty: sel.qty,
             price: unitPrice,
             purchasePrice: typeCostPrice
-          }
-        })
-        .filter(Boolean) as SaleItemDetail[]
+          })
+        }
+      }
 
       if (itemsToSave.length === 0) {
-        setErrorMessage('Please select at least one valid tyre product from available stock.')
+        setErrorMessage('Please select at least one tyre product and at least one tyre type.')
         setIsSubmitting(false)
         return
       }
 
       if (itemsToSave.some((item) => item.price <= 0)) {
-        setErrorMessage('Please enter a valid selling price greater than 0 for each tyre item.')
+        setErrorMessage('Please enter a valid selling price greater than 0 for each selected tyre type.')
         setIsSubmitting(false)
         return
       }
@@ -356,7 +400,7 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
       setCustomerPhone('')
       setVehicleNumber('')
       setPaymentMethod('UPI')
-      setSaleItems([{ stockId: '', qty: 1, price: '', tyreType: '' }])
+      setSaleItems([{ stockId: '', typeSelections: createTypeSelections() }])
       setInterestType('percentage')
       setInterestValue(0)
       setAmountPaidNow(0)
@@ -1338,167 +1382,222 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
                   <label className="block text-xs font-medium text-text-muted">Tyre Products (From Stock)</label>
                   <button
                     type="button"
-                    onClick={() => setSaleItems([...saleItems, { stockId: '', qty: 1, price: '', tyreType: '' }])}
+                    onClick={() =>
+                      setSaleItems([...saleItems, { stockId: '', typeSelections: createTypeSelections() }])
+                    }
                     className="text-xs font-semibold text-accent hover:text-accent-hover flex items-center gap-1"
                   >
-                    <Plus className="w-3 h-3" /> Add Item
+                    <Plus className="w-3 h-3" /> Add Another Tyre
                   </button>
-                </div>
-
-                <div className="grid grid-cols-12 gap-2 text-[11px] text-text-muted font-medium px-1">
-                  <div className="col-span-6">Product</div>
-                  <div className="col-span-2 text-center">Qty</div>
-                  <div className="col-span-3">Selling Price (₹)</div>
-                  <div className="col-span-1"></div>
                 </div>
 
                 {saleItems.map((item, index) => {
                   const selectedStock = availableStock.find((s) => s.id === item.stockId)
+                  const selectedTypeCount = TYRE_TYPES.filter((t) => item.typeSelections[t]?.selected).length
+
                   return (
-                    <div key={index} className="grid grid-cols-12 gap-2 items-center">
-                      <div className="col-span-6">
-                        <select
-                          value={item.stockId}
-                          onChange={(e) => {
-                            const newItems = [...saleItems]
-                            const stockId = e.target.value
-                            newItems[index].stockId = stockId
-                            const found = availableStock.find((s) => s.id === stockId)
-                            if (found) {
-                              const firstInStockType =
-                                TYRE_TYPES.find((t) => (found.typeQuantities?.[t] || 0) > 0) ||
-                                'Tubeless + Radial'
-                              newItems[index].tyreType = firstInStockType
-                              if (found.sellingPrice && (newItems[index].price === '' || newItems[index].price === 0)) {
-                                newItems[index].price = found.sellingPrice
-                              }
-                            }
-                            setSaleItems(newItems)
-                          }}
-                          className="w-full bg-background border border-border rounded-xl px-3 py-2 text-white focus:outline-none focus:border-accent appearance-none text-xs truncate"
-                          required
-                        >
-                          <option value="" disabled>
-                            Select tyre from stock...
-                          </option>
-                          {availableStock.map((stock) => (
-                            <option key={stock.id} value={stock.id}>
-                              {stock.brand} {stock.model} ({stock.size}) [{stock.qty} in stock]
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="col-span-2">
-                        <input
-                          type="number"
-                          min="1"
-                          max={
-                            selectedStock && item.tyreType && (selectedStock.typeQuantities?.[item.tyreType] || 0) > 0
-                              ? selectedStock.typeQuantities?.[item.tyreType]
-                              : selectedStock
-                              ? selectedStock.qty
-                              : 100
-                          }
-                          value={item.qty}
-                          onChange={(e) => {
-                            const newItems = [...saleItems]
-                            newItems[index].qty = Math.max(1, parseInt(e.target.value) || 1)
-                            setSaleItems(newItems)
-                          }}
-                          className="w-full bg-background border border-border rounded-xl px-2 py-2 text-white focus:outline-none focus:border-accent text-xs text-center font-medium"
-                          required
-                        />
-                      </div>
-
-                      <div className="col-span-3">
-                        <div className="relative">
-                          <span className="absolute left-2.5 top-2 text-xs text-text-muted">₹</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            placeholder="Price"
-                            value={item.price}
+                    <div
+                      key={index}
+                      className="p-3 rounded-xl bg-background/60 border border-border space-y-3"
+                    >
+                      {/* Stock Product Select + Remove */}
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          <select
+                            value={item.stockId}
                             onChange={(e) => {
+                              const stockId = e.target.value
+                              const found = availableStock.find((s) => s.id === stockId)
                               const newItems = [...saleItems]
-                              newItems[index].price =
-                                e.target.value === '' ? '' : Math.max(0, parseFloat(e.target.value) || 0)
+                              newItems[index] = {
+                                stockId,
+                                typeSelections: createTypeSelections(found)
+                              }
                               setSaleItems(newItems)
                             }}
-                            className="w-full bg-background border border-border rounded-xl pl-6 pr-2 py-2 text-white focus:outline-none focus:border-accent text-xs font-semibold"
+                            className="w-full bg-background border border-border rounded-xl px-3 py-2 text-white focus:outline-none focus:border-accent appearance-none text-xs truncate"
                             required
-                          />
+                          >
+                            <option value="" disabled>
+                              Select tyre from stock...
+                            </option>
+                            {availableStock.map((stock) => (
+                              <option key={stock.id} value={stock.id}>
+                                {stock.brand} {stock.model} ({stock.size}) [{stock.qty} in stock]
+                              </option>
+                            ))}
+                          </select>
                         </div>
-                      </div>
 
-                      <div className="col-span-1 flex justify-center">
-                        {saleItems.length > 1 ? (
+                        {saleItems.length > 1 && (
                           <button
                             type="button"
                             onClick={() => setSaleItems(saleItems.filter((_, i) => i !== index))}
-                            className="text-text-muted hover:text-red-400 p-1"
-                            title="Remove item"
+                            className="text-text-muted hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors shrink-0"
+                            title="Remove product"
                           >
                             <X className="w-4 h-4" />
                           </button>
-                        ) : null}
+                        )}
                       </div>
 
-                      {/* Tyre Type Selector for Selected Stock */}
+                      {/* Multi-Select Tyre Types with Per-Type Qty & Selling Price */}
                       {selectedStock && (
-                        <div className="col-span-12 -mt-0.5 mb-2 p-2.5 rounded-xl bg-background/70 border border-border/80 space-y-2">
+                        <div className="space-y-2">
                           <div className="flex items-center justify-between text-[11px]">
                             <span className="font-medium text-text-muted">
-                              Select Tyre Type Sold:
+                              Select Tyre Types Sold (Multi-Select):
                             </span>
-                            {item.tyreType && (
-                              <span className="text-[10px] text-text-muted font-mono">
-                                Cost: ₹{(selectedStock.typePrices?.[item.tyreType] ?? selectedStock.purchasePrice).toLocaleString('en-IN')}
-                              </span>
-                            )}
+                            <span className="text-[10px] text-emerald-400 font-semibold">
+                              {selectedTypeCount} type{selectedTypeCount === 1 ? '' : 's'} selected
+                            </span>
                           </div>
-                          <div className="grid grid-cols-2 gap-1.5">
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             {TYRE_TYPES.map((typeOption) => {
                               const availableForType = selectedStock.typeQuantities?.[typeOption] ?? 0
-                              const isSelected = item.tyreType === typeOption
+                              const typeCost =
+                                selectedStock.typePrices?.[typeOption] ?? selectedStock.purchasePrice
+                              const sel = item.typeSelections[typeOption]
+                              const isSelected = !!sel?.selected
                               const isDisabled = availableForType <= 0
+
                               return (
-                                <button
+                                <div
                                   key={typeOption}
-                                  type="button"
-                                  disabled={isDisabled}
-                                  onClick={() => {
-                                    const newItems = [...saleItems]
-                                    newItems[index].tyreType = typeOption
-                                    if (newItems[index].qty > availableForType && availableForType > 0) {
-                                      newItems[index].qty = availableForType
-                                    }
-                                    setSaleItems(newItems)
-                                  }}
                                   className={cn(
-                                    "px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-all flex items-center justify-between gap-1 text-left",
+                                    "rounded-xl border transition-all p-2.5 space-y-2",
                                     isSelected
-                                      ? "bg-accent/20 border-accent text-white shadow-sm ring-1 ring-accent/30"
+                                      ? "bg-accent/10 border-accent/60 shadow-sm ring-1 ring-accent/25"
                                       : isDisabled
-                                      ? "bg-background/40 border-border/40 text-text-muted/40 cursor-not-allowed"
-                                      : "bg-card border-border text-text-muted hover:text-white hover:border-border/80"
+                                      ? "bg-background/30 border-border/40 opacity-50"
+                                      : "bg-card border-border hover:border-border/80"
                                   )}
                                 >
-                                  <span className="truncate">{typeOption}</span>
-                                  <span
-                                    className={cn(
-                                      "text-[10px] font-mono shrink-0",
-                                      isSelected
-                                        ? "text-emerald-400"
-                                        : isDisabled
-                                        ? "text-text-muted/40"
-                                        : "text-text-muted"
-                                    )}
+                                  <button
+                                    type="button"
+                                    disabled={isDisabled}
+                                    onClick={() => {
+                                      const newItems = [...saleItems]
+                                      const curr = newItems[index].typeSelections[typeOption]
+                                      newItems[index] = {
+                                        ...newItems[index],
+                                        typeSelections: {
+                                          ...newItems[index].typeSelections,
+                                          [typeOption]: {
+                                            ...curr,
+                                            selected: !curr.selected,
+                                            qty: Math.min(Math.max(1, curr.qty), availableForType)
+                                          }
+                                        }
+                                      }
+                                      setSaleItems(newItems)
+                                    }}
+                                    className="w-full flex items-center justify-between gap-2 text-left disabled:cursor-not-allowed"
                                   >
-                                    ({availableForType})
-                                  </span>
-                                </button>
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span
+                                        className={cn(
+                                          "w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors",
+                                          isSelected
+                                            ? "bg-accent border-accent text-white"
+                                            : "border-border bg-background"
+                                        )}
+                                      >
+                                        {isSelected && <Check className="w-3 h-3" />}
+                                      </span>
+                                      <span className="text-xs font-semibold text-white truncate">
+                                        {typeOption}
+                                      </span>
+                                    </div>
+                                    <span
+                                      className={cn(
+                                        "text-[10px] font-mono shrink-0",
+                                        isSelected
+                                          ? "text-emerald-400 font-bold"
+                                          : isDisabled
+                                          ? "text-text-muted/50"
+                                          : "text-text-muted"
+                                      )}
+                                    >
+                                      {availableForType} left
+                                    </span>
+                                  </button>
+
+                                  <div className="flex items-center justify-between text-[10px] text-text-muted px-0.5">
+                                    <span>Cost: ₹{typeCost.toLocaleString('en-IN')}</span>
+                                    {isSelected && sel.price !== '' && Number(sel.price) > 0 && (
+                                      <span className="text-emerald-400 font-mono font-semibold">
+                                        Sub: ₹{(Number(sel.price) * sel.qty).toLocaleString('en-IN')}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {isSelected && (
+                                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/60">
+                                      <div>
+                                        <label className="block text-[10px] text-text-muted mb-0.5">
+                                          Qty (max {availableForType})
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          max={availableForType}
+                                          value={sel.qty}
+                                          onChange={(e) => {
+                                            const val = Math.min(
+                                              availableForType,
+                                              Math.max(1, parseInt(e.target.value) || 1)
+                                            )
+                                            const newItems = [...saleItems]
+                                            newItems[index] = {
+                                              ...newItems[index],
+                                              typeSelections: {
+                                                ...newItems[index].typeSelections,
+                                                [typeOption]: { ...sel, qty: val }
+                                              }
+                                            }
+                                            setSaleItems(newItems)
+                                          }}
+                                          className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-white focus:outline-none focus:border-accent text-xs text-center font-bold font-mono"
+                                          required
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-[10px] text-text-muted mb-0.5">
+                                          Selling Price (₹)
+                                        </label>
+                                        <div className="relative">
+                                          <span className="absolute left-2 top-1.5 text-[11px] text-text-muted">₹</span>
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="any"
+                                            placeholder="Price"
+                                            value={sel.price}
+                                            onChange={(e) => {
+                                              const val =
+                                                e.target.value === ''
+                                                  ? ''
+                                                  : Math.max(0, parseFloat(e.target.value) || 0)
+                                              const newItems = [...saleItems]
+                                              newItems[index] = {
+                                                ...newItems[index],
+                                                typeSelections: {
+                                                  ...newItems[index].typeSelections,
+                                                  [typeOption]: { ...sel, price: val }
+                                                }
+                                              }
+                                              setSaleItems(newItems)
+                                            }}
+                                            className="w-full bg-background border border-border rounded-lg pl-5 pr-2 py-1.5 text-white focus:outline-none focus:border-accent text-xs font-bold font-mono"
+                                            required
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                               )
                             })}
                           </div>

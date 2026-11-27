@@ -51,12 +51,15 @@ export default function StockManagement({ externalSearch }: StockManagementProps
   // Sell Stock modal state (triggered via tick mark)
   const [sellingItem, setSellingItem] = useState<StockItem | null>(null)
   const [sellForm, setSellForm] = useState({
-    qty: 1,
-    sellingPrice: 0,
+    typeSelections: {
+      'Tubeless + Radial': { selected: false, qty: 1, price: 0 },
+      'Tubeless + Nylon': { selected: false, qty: 1, price: 0 },
+      'Tube-Type + Nylon': { selected: false, qty: 1, price: 0 },
+      'Tube-Type + Radial': { selected: false, qty: 1, price: 0 }
+    } as Record<TyreType, { selected: boolean; qty: number; price: number }>,
     customerName: 'Walk-in Customer',
     customerPhone: '',
     vehicleNumber: '',
-    tyreType: 'Tubeless + Radial' as TyreType,
     paymentMethod: 'UPI',
     date: new Intl.DateTimeFormat('en-CA').format(new Date())
   })
@@ -199,15 +202,34 @@ export default function StockManagement({ externalSearch }: StockManagementProps
   const handleOpenSellModal = (item: StockItem) => {
     const firstInStockType =
       TYRE_TYPES.find((t) => (item.typeQuantities?.[t] || 0) > 0) || 'Tubeless + Radial'
-    const typeQty = item.typeQuantities?.[firstInStockType] || item.qty
+    const defaultPrice = item.sellingPrice || 0
     setSellingItem(item)
     setSellForm({
-      qty: typeQty,
-      sellingPrice: item.sellingPrice || 0,
+      typeSelections: {
+        'Tubeless + Radial': {
+          selected: firstInStockType === 'Tubeless + Radial',
+          qty: 1,
+          price: defaultPrice
+        },
+        'Tubeless + Nylon': {
+          selected: firstInStockType === 'Tubeless + Nylon',
+          qty: 1,
+          price: defaultPrice
+        },
+        'Tube-Type + Nylon': {
+          selected: firstInStockType === 'Tube-Type + Nylon',
+          qty: 1,
+          price: defaultPrice
+        },
+        'Tube-Type + Radial': {
+          selected: firstInStockType === 'Tube-Type + Radial',
+          qty: 1,
+          price: defaultPrice
+        }
+      },
       customerName: 'Walk-in Customer',
       customerPhone: '',
       vehicleNumber: '',
-      tyreType: firstInStockType,
       paymentMethod: 'UPI',
       date: new Intl.DateTimeFormat('en-CA').format(new Date())
     })
@@ -217,40 +239,57 @@ export default function StockManagement({ externalSearch }: StockManagementProps
   const handleConfirmSell = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!sellingItem) return
-    if (sellForm.qty <= 0 || sellForm.qty > sellingItem.qty) {
-      setErrorMsg(`Please enter a valid quantity between 1 and ${sellingItem.qty}`)
+
+    const itemsToSell = TYRE_TYPES.flatMap((t) => {
+      const sel = sellForm.typeSelections[t]
+      if (!sel?.selected) return []
+      return [{
+        stockId: sellingItem.id,
+        brand: sellingItem.brand,
+        model: sellingItem.model,
+        size: sellingItem.size,
+        tyreType: t,
+        qty: sel.qty,
+        price: sel.price,
+        purchasePrice: sellingItem.typePrices?.[t] ?? sellingItem.purchasePrice
+      }]
+    })
+
+    if (itemsToSell.length === 0) {
+      setErrorMsg('Please select at least one tyre type to sell.')
       return
     }
+    for (const it of itemsToSell) {
+      const maxForType = sellingItem.typeQuantities?.[it.tyreType as TyreType] ?? sellingItem.qty
+      if (it.qty <= 0 || it.qty > maxForType) {
+        setErrorMsg(`Please enter a valid quantity (1 to ${maxForType}) for ${it.tyreType}.`)
+        return
+      }
+      if (it.price <= 0) {
+        setErrorMsg(`Please enter a valid selling price greater than ₹0 for ${it.tyreType}.`)
+        return
+      }
+    }
+
+    const totalQtySold = itemsToSell.reduce((s, it) => s + it.qty, 0)
 
     setIsSubmitting(true)
     setErrorMsg(null)
     try {
-      const typeCostPrice = sellingItem.typePrices?.[sellForm.tyreType] ?? sellingItem.purchasePrice
       const created = await createSale({
         customerName: sellForm.customerName.trim() || 'Walk-in Customer',
         customerPhone: sellForm.customerPhone.trim(),
         vehicleNumber: sellForm.vehicleNumber.trim(),
         date: sellForm.date,
         paymentMethod: sellForm.paymentMethod,
-        items: [
-          {
-            stockId: sellingItem.id,
-            brand: sellingItem.brand,
-            model: sellingItem.model,
-            size: sellingItem.size,
-            tyreType: sellForm.tyreType,
-            qty: sellForm.qty,
-            price: sellForm.sellingPrice,
-            purchasePrice: typeCostPrice
-          }
-        ]
+        items: itemsToSell
       })
 
-      const isSoldOut = sellForm.qty >= sellingItem.qty
+      const isSoldOut = totalQtySold >= sellingItem.qty
       setSuccessNotice(
         isSoldOut
-          ? `Sold out all ${sellForm.qty} unit(s) of ${sellingItem.brand} ${sellingItem.model}! Invoice #${created.invoiceNumber} recorded in Sales.`
-          : `Sold ${sellForm.qty} unit(s) of ${sellingItem.brand} ${sellingItem.model}. Invoice #${created.invoiceNumber} recorded in Sales.`
+          ? `Sold out all ${totalQtySold} unit(s) of ${sellingItem.brand} ${sellingItem.model}! Invoice #${created.invoiceNumber} recorded in Sales.`
+          : `Sold ${totalQtySold} unit(s) of ${sellingItem.brand} ${sellingItem.model}. Invoice #${created.invoiceNumber} recorded in Sales.`
       )
       setCompletedSale(created)
       setSellingItem(null)
@@ -720,9 +759,25 @@ export default function StockManagement({ externalSearch }: StockManagementProps
       )}
 
       {/* Sell Stock Modal (Triggered by Tick Mark) */}
-      {sellingItem && (
+      {sellingItem && (() => {
+        const quickSellTotalQty = TYRE_TYPES.reduce(
+          (sum, t) => sum + (sellForm.typeSelections[t]?.selected ? sellForm.typeSelections[t].qty : 0),
+          0
+        )
+        const quickSellTotalAmount = TYRE_TYPES.reduce((sum, t) => {
+          const sel = sellForm.typeSelections[t]
+          return sum + (sel?.selected ? sel.qty * sel.price : 0)
+        }, 0)
+        const quickSellTotalProfit = TYRE_TYPES.reduce((sum, t) => {
+          const sel = sellForm.typeSelections[t]
+          if (!sel?.selected) return sum
+          const cost = sellingItem.typePrices?.[t] ?? sellingItem.purchasePrice
+          return sum + Math.max(0, (sel.price - cost) * sel.qty)
+        }, 0)
+
+        return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="bg-card w-full max-w-lg rounded-2xl border border-border shadow-2xl p-6 overflow-hidden">
+          <div className="bg-card w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-2xl border border-border shadow-2xl p-6">
             <div className="flex justify-between items-center mb-5 pb-4 border-b border-border">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
@@ -758,146 +813,154 @@ export default function StockManagement({ externalSearch }: StockManagementProps
               <div className="text-right">
                 <span className="text-[11px] text-text-muted block">Available in Stock</span>
                 <span className="text-sm font-bold text-emerald-400">{sellingItem.qty} units</span>
-                <span className="text-[11px] text-text-muted block mt-0.5">Purchase: ₹{sellingItem.purchasePrice.toLocaleString('en-IN')}</span>
+                <span className="text-[11px] text-text-muted block mt-0.5">Avg Cost: ₹{sellingItem.purchasePrice.toLocaleString('en-IN')}</span>
               </div>
             </div>
 
             <form onSubmit={handleConfirmSell} className="space-y-4">
-              {/* Type of Tyre Sold */}
+              {/* Multi-Select Types with Qty & Selling Price per type */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-medium text-text-muted">
-                    Type of Tyre Sold <span className="text-red-400">*</span>
+                    Select Tyre Types, Qty &amp; Price <span className="text-red-400">*</span>
                   </label>
-                  <span className="text-[11px] font-mono text-text-muted">
-                    Cost: ₹{(sellingItem.typePrices?.[sellForm.tyreType] ?? sellingItem.purchasePrice).toLocaleString('en-IN')}
+                  <span className="text-[11px] font-mono text-emerald-400">
+                    {quickSellTotalQty} unit{quickSellTotalQty === 1 ? '' : 's'} selected
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {TYRE_TYPES.map((typeOption) => {
                     const availableForType = sellingItem.typeQuantities?.[typeOption] ?? 0
-                    const isSelected = sellForm.tyreType === typeOption
+                    const typeCost = sellingItem.typePrices?.[typeOption] ?? sellingItem.purchasePrice
+                    const sel = sellForm.typeSelections[typeOption]
+                    const isSelected = !!sel?.selected
                     const isDisabled = availableForType <= 0
                     return (
-                      <button
+                      <div
                         key={typeOption}
-                        type="button"
-                        disabled={isDisabled}
-                        onClick={() =>
-                          setSellForm((f) => ({
-                            ...f,
-                            tyreType: typeOption,
-                            qty: Math.min(f.qty, availableForType) || 1
-                          }))
-                        }
                         className={cn(
-                          "px-3 py-2 rounded-xl border text-xs font-semibold text-left transition-all flex items-center justify-between gap-1",
+                          "p-2.5 rounded-xl border transition-all space-y-2",
                           isSelected
-                            ? "bg-accent/15 border-accent text-white shadow-sm ring-1 ring-accent/30"
+                            ? "bg-accent/10 border-accent/60 shadow-sm ring-1 ring-accent/25"
                             : isDisabled
-                            ? "bg-background/40 border-border/40 text-text-muted/40 cursor-not-allowed"
-                            : "bg-background border-border text-text-muted hover:text-white hover:border-border/80"
+                            ? "bg-background/30 border-border/40 opacity-50"
+                            : "bg-background border-border hover:border-border/80"
                         )}
                       >
-                        <span className="truncate">{typeOption}</span>
-                        <span className="text-[10px] font-mono shrink-0">({availableForType})</span>
-                      </button>
+                        <button
+                          type="button"
+                          disabled={isDisabled}
+                          onClick={() =>
+                            setSellForm((f) => ({
+                              ...f,
+                              typeSelections: {
+                                ...f.typeSelections,
+                                [typeOption]: {
+                                  ...sel,
+                                  selected: !sel.selected,
+                                  qty: Math.min(Math.max(1, sel.qty), availableForType)
+                                }
+                              }
+                            }))
+                          }
+                          className="w-full flex items-center justify-between gap-1.5 text-left disabled:cursor-not-allowed"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span
+                              className={cn(
+                                "w-4 h-4 rounded border flex items-center justify-center shrink-0",
+                                isSelected
+                                  ? "bg-accent border-accent text-white"
+                                  : "border-border bg-card"
+                              )}
+                            >
+                              {isSelected && <Check className="w-3 h-3" />}
+                            </span>
+                            <span className="text-xs font-semibold text-white truncate">{typeOption}</span>
+                          </div>
+                          <span className="text-[10px] font-mono text-emerald-400 shrink-0">
+                            {availableForType} left
+                          </span>
+                        </button>
+
+                        <div className="text-[10px] text-text-muted flex justify-between">
+                          <span>Cost: ₹{typeCost.toLocaleString('en-IN')}</span>
+                          {isSelected && sel.price > 0 && (
+                            <span className="text-emerald-400 font-mono font-semibold">
+                              ₹{(sel.qty * sel.price).toLocaleString('en-IN')}
+                            </span>
+                          )}
+                        </div>
+
+                        {isSelected && (
+                          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/60">
+                            <div>
+                              <label className="block text-[10px] text-text-muted mb-0.5">
+                                Qty (max {availableForType})
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                max={availableForType}
+                                value={sel.qty}
+                                onChange={(e) => {
+                                  const val = Math.min(availableForType, Math.max(1, parseInt(e.target.value) || 1))
+                                  setSellForm((f) => ({
+                                    ...f,
+                                    typeSelections: {
+                                      ...f.typeSelections,
+                                      [typeOption]: { ...sel, qty: val }
+                                    }
+                                  }))
+                                }}
+                                className="w-full bg-background border border-border rounded-lg px-2 py-1 text-white text-xs text-center font-bold font-mono focus:outline-none focus:border-accent"
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-text-muted mb-0.5">
+                                Price (₹)
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={sel.price || ''}
+                                placeholder="0"
+                                onChange={(e) => {
+                                  const val = Math.max(0, parseFloat(e.target.value) || 0)
+                                  setSellForm((f) => ({
+                                    ...f,
+                                    typeSelections: {
+                                      ...f.typeSelections,
+                                      [typeOption]: { ...sel, price: val }
+                                    }
+                                  }))
+                                }}
+                                className="w-full bg-background border border-border rounded-lg px-2 py-1 text-white text-xs text-center font-bold font-mono focus:outline-none focus:border-accent"
+                                required
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     )
                   })}
                 </div>
               </div>
 
-              {/* Quantity to sell */}
+              {/* Sale Date */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-medium text-text-muted">
-                    Quantity to Sell <span className="text-red-400">*</span>
-                  </label>
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setSellForm(f => ({ ...f, qty: 1 }))}
-                      className={cn(
-                        "px-2 py-0.5 rounded border transition-colors",
-                        sellForm.qty === 1 
-                          ? "bg-accent/20 border-accent/40 text-accent font-semibold" 
-                          : "border-border text-text-muted hover:text-white"
-                      )}
-                    >
-                      1 Unit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSellForm(f => ({ ...f, qty: sellingItem.qty }))}
-                      className={cn(
-                        "px-2 py-0.5 rounded border transition-colors",
-                        sellForm.qty === sellingItem.qty 
-                          ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400 font-semibold" 
-                          : "border-border text-text-muted hover:text-white"
-                      )}
-                    >
-                      Sell All ({sellingItem.qty})
-                    </button>
-                  </div>
-                </div>
-
-                <div className="relative">
-                  <input
-                    type="number"
-                    min="1"
-                    max={sellingItem.qty}
-                    value={sellForm.qty}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value) || 1
-                      setSellForm(f => ({ ...f, qty: Math.min(sellingItem.qty, Math.max(1, val)) }))
-                    }}
-                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm"
-                    required
-                  />
-                  <span className="absolute right-3 top-2.5 text-xs text-text-muted">
-                    / max {sellingItem.qty}
-                  </span>
-                </div>
-
-                {sellForm.qty === sellingItem.qty ? (
-                  <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-emerald-400 font-medium">
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Selling all {sellingItem.qty} units will mark this item as <strong>Sold Out</strong>.</span>
-                  </div>
-                ) : (
-                  <div className="mt-1.5 text-[11px] text-text-muted">
-                    Remaining after sale: {sellingItem.qty - sellForm.qty} units
-                  </div>
-                )}
-              </div>
-
-              {/* Selling price per unit & Date */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-text-muted mb-1">
-                    Selling Price / Unit (₹) *
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={sellForm.sellingPrice}
-                    onChange={(e) => setSellForm(f => ({ ...f, sellingPrice: Math.max(0, parseFloat(e.target.value) || 0) }))}
-                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm font-semibold"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-text-muted mb-1">
-                    Sale Date
-                  </label>
-                  <input
-                    type="date"
-                    value={sellForm.date}
-                    onChange={(e) => setSellForm(f => ({ ...f, date: e.target.value }))}
-                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm"
-                    required
-                  />
-                </div>
+                <label className="block text-xs font-medium text-text-muted mb-1">
+                  Sale Date
+                </label>
+                <input
+                  type="date"
+                  value={sellForm.date}
+                  onChange={(e) => setSellForm(f => ({ ...f, date: e.target.value }))}
+                  className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-accent text-sm"
+                  required
+                />
               </div>
 
               {/* Customer & Vehicle Info */}
@@ -969,13 +1032,13 @@ export default function StockManagement({ externalSearch }: StockManagementProps
                 <div>
                   <span className="text-xs text-text-muted block">Total Sale Amount</span>
                   <span className="text-xl font-bold text-accent">
-                    ₹{(sellForm.qty * sellForm.sellingPrice).toLocaleString('en-IN')}
+                    ₹{quickSellTotalAmount.toLocaleString('en-IN')}
                   </span>
                 </div>
                 <div className="text-right">
                   <span className="text-xs text-text-muted block">Est. Profit</span>
                   <span className="text-sm font-semibold text-emerald-400">
-                    +₹{Math.max(0, (sellForm.sellingPrice - sellingItem.purchasePrice) * sellForm.qty).toLocaleString('en-IN')}
+                    +₹{quickSellTotalProfit.toLocaleString('en-IN')}
                   </span>
                 </div>
               </div>
@@ -1002,7 +1065,7 @@ export default function StockManagement({ externalSearch }: StockManagementProps
                   ) : (
                     <>
                       <Check className="w-4 h-4" />
-                      <span>{sellForm.qty === sellingItem.qty ? 'Confirm & Mark Sold Out' : 'Confirm Sale'}</span>
+                      <span>{quickSellTotalQty >= sellingItem.qty ? 'Confirm & Mark Sold Out' : 'Confirm Sale'}</span>
                     </>
                   )}
                 </button>
@@ -1010,7 +1073,8 @@ export default function StockManagement({ externalSearch }: StockManagementProps
             </form>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* Invoice Generation Modal for Completed Sale */}
       {completedSale && (
