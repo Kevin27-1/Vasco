@@ -11,7 +11,13 @@ import {
   runTransaction
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import { computeStatus, deductTypeQuantities, normalizeTypeQuantities } from './stockService'
+import {
+  computeStatus,
+  computeWeightedPurchasePrice,
+  deductTypeQuantities,
+  normalizeTypePrices,
+  normalizeTypeQuantities
+} from './stockService'
 
 export interface SaleItemDetail {
   stockId?: string
@@ -205,11 +211,21 @@ export async function createSale(params: CreateSaleParams): Promise<SaleRecord> 
           const newStatus = computeStatus(newQty, minStock)
 
           const currentTypeQuantities = normalizeTypeQuantities(currentData.typeQuantities, currentQty)
-          const updatedTypeQuantities = deductTypeQuantities(currentTypeQuantities, item.qty)
+          const updatedTypeQuantities = deductTypeQuantities(currentTypeQuantities, item.qty, item.tyreType)
+          const currentTypePrices = normalizeTypePrices(
+            currentData.typePrices,
+            Number(currentData.purchasePrice) || 0
+          )
+          const updatedPurchasePrice = computeWeightedPurchasePrice(
+            updatedTypeQuantities,
+            currentTypePrices,
+            Number(currentData.purchasePrice) || 0
+          )
 
           transaction.update(stockDocRef, {
             qty: newQty,
             typeQuantities: updatedTypeQuantities,
+            purchasePrice: updatedPurchasePrice,
             status: newStatus,
             lastUpdated: new Intl.DateTimeFormat('en-IN', {
               day: '2-digit',

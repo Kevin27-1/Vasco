@@ -20,6 +20,7 @@ import {
 import { PDFDownloadLink } from '@react-pdf/renderer'
 import { InvoicePDF } from '../components/InvoicePDF'
 import ConfirmModal from '../components/ConfirmModal'
+import { cn } from '../lib/utils'
 import {
   type SaleRecord,
   type SaleItemDetail,
@@ -29,7 +30,7 @@ import {
   recordCreditPayment,
   seedInitialSalesIfEmpty
 } from '../services/salesService'
-import { type StockItem, subscribeToStock } from '../services/stockService'
+import { type StockItem, type TyreType, TYRE_TYPES, subscribeToStock } from '../services/stockService'
 
 function getDefaultDueDate(daysAhead = 30): string {
   const d = new Date()
@@ -90,8 +91,9 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
     stockId: string
     qty: number
     price: number | ''
+    tyreType: TyreType | ''
   }[]>([
-    { stockId: '', qty: 1, price: '' }
+    { stockId: '', qty: 1, price: '', tyreType: '' }
   ])
 
   // Credit Specific Form State
@@ -295,15 +297,20 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
         .map((si) => {
           const stockItem = availableStock.find((s) => s.id === si.stockId)
           if (!stockItem) return null
+          const chosenType = (si.tyreType ||
+            TYRE_TYPES.find((t) => (stockItem.typeQuantities?.[t] || 0) > 0) ||
+            'Tubeless + Radial') as TyreType
+          const typeCostPrice = stockItem.typePrices?.[chosenType] ?? stockItem.purchasePrice
           const unitPrice = typeof si.price === 'number' ? si.price : parseFloat(String(si.price)) || 0
           return {
             stockId: stockItem.id,
             brand: stockItem.brand,
             model: stockItem.model,
             size: stockItem.size,
+            tyreType: chosenType,
             qty: si.qty,
             price: unitPrice,
-            purchasePrice: stockItem.purchasePrice
+            purchasePrice: typeCostPrice
           }
         })
         .filter(Boolean) as SaleItemDetail[]
@@ -349,7 +356,7 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
       setCustomerPhone('')
       setVehicleNumber('')
       setPaymentMethod('UPI')
-      setSaleItems([{ stockId: '', qty: 1, price: '' }])
+      setSaleItems([{ stockId: '', qty: 1, price: '', tyreType: '' }])
       setInterestType('percentage')
       setInterestValue(0)
       setAmountPaidNow(0)
@@ -885,13 +892,18 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
                               </p>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className="text-xs text-text-muted font-mono">{sale.items[0].size}</span>
+                                {sale.items[0].tyreType && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                    {sale.items[0].tyreType}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           ) : (
                             <div>
                               <span className="font-medium text-accent">{sale.items.length} Tyre Items</span>
                               <div className="text-[10px] text-text-muted truncate max-w-[220px] mt-0.5">
-                                {sale.items.map(it => `${it.brand} (${it.size})`).join(', ')}
+                                {sale.items.map(it => `${it.brand}${it.tyreType ? ` (${it.tyreType})` : ` (${it.size})`}`).join(', ')}
                               </div>
                             </div>
                           )}
@@ -1326,7 +1338,7 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
                   <label className="block text-xs font-medium text-text-muted">Tyre Products (From Stock)</label>
                   <button
                     type="button"
-                    onClick={() => setSaleItems([...saleItems, { stockId: '', qty: 1, price: '' }])}
+                    onClick={() => setSaleItems([...saleItems, { stockId: '', qty: 1, price: '', tyreType: '' }])}
                     className="text-xs font-semibold text-accent hover:text-accent-hover flex items-center gap-1"
                   >
                     <Plus className="w-3 h-3" /> Add Item
@@ -1352,8 +1364,14 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
                             const stockId = e.target.value
                             newItems[index].stockId = stockId
                             const found = availableStock.find((s) => s.id === stockId)
-                            if (found?.sellingPrice && (newItems[index].price === '' || newItems[index].price === 0)) {
-                              newItems[index].price = found.sellingPrice
+                            if (found) {
+                              const firstInStockType =
+                                TYRE_TYPES.find((t) => (found.typeQuantities?.[t] || 0) > 0) ||
+                                'Tubeless + Radial'
+                              newItems[index].tyreType = firstInStockType
+                              if (found.sellingPrice && (newItems[index].price === '' || newItems[index].price === 0)) {
+                                newItems[index].price = found.sellingPrice
+                              }
                             }
                             setSaleItems(newItems)
                           }}
@@ -1375,7 +1393,13 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
                         <input
                           type="number"
                           min="1"
-                          max={selectedStock ? selectedStock.qty : 100}
+                          max={
+                            selectedStock && item.tyreType && (selectedStock.typeQuantities?.[item.tyreType] || 0) > 0
+                              ? selectedStock.typeQuantities?.[item.tyreType]
+                              : selectedStock
+                              ? selectedStock.qty
+                              : 100
+                          }
                           value={item.qty}
                           onChange={(e) => {
                             const newItems = [...saleItems]
@@ -1420,6 +1444,66 @@ export default function Sales({ externalSearch }: SalesProps = {}) {
                           </button>
                         ) : null}
                       </div>
+
+                      {/* Tyre Type Selector for Selected Stock */}
+                      {selectedStock && (
+                        <div className="col-span-12 -mt-0.5 mb-2 p-2.5 rounded-xl bg-background/70 border border-border/80 space-y-2">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-medium text-text-muted">
+                              Select Tyre Type Sold:
+                            </span>
+                            {item.tyreType && (
+                              <span className="text-[10px] text-text-muted font-mono">
+                                Cost: ₹{(selectedStock.typePrices?.[item.tyreType] ?? selectedStock.purchasePrice).toLocaleString('en-IN')}
+                              </span>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {TYRE_TYPES.map((typeOption) => {
+                              const availableForType = selectedStock.typeQuantities?.[typeOption] ?? 0
+                              const isSelected = item.tyreType === typeOption
+                              const isDisabled = availableForType <= 0
+                              return (
+                                <button
+                                  key={typeOption}
+                                  type="button"
+                                  disabled={isDisabled}
+                                  onClick={() => {
+                                    const newItems = [...saleItems]
+                                    newItems[index].tyreType = typeOption
+                                    if (newItems[index].qty > availableForType && availableForType > 0) {
+                                      newItems[index].qty = availableForType
+                                    }
+                                    setSaleItems(newItems)
+                                  }}
+                                  className={cn(
+                                    "px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-all flex items-center justify-between gap-1 text-left",
+                                    isSelected
+                                      ? "bg-accent/20 border-accent text-white shadow-sm ring-1 ring-accent/30"
+                                      : isDisabled
+                                      ? "bg-background/40 border-border/40 text-text-muted/40 cursor-not-allowed"
+                                      : "bg-card border-border text-text-muted hover:text-white hover:border-border/80"
+                                  )}
+                                >
+                                  <span className="truncate">{typeOption}</span>
+                                  <span
+                                    className={cn(
+                                      "text-[10px] font-mono shrink-0",
+                                      isSelected
+                                        ? "text-emerald-400"
+                                        : isDisabled
+                                        ? "text-text-muted/40"
+                                        : "text-text-muted"
+                                    )}
+                                  >
+                                    ({availableForType})
+                                  </span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })}

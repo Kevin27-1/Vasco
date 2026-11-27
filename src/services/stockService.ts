@@ -123,15 +123,23 @@ export function computeWeightedPurchasePrice(
   return Math.max(0, Number(fallbackPrice) || 0)
 }
 
-export function deductTypeQuantities(current: TyreTypeQuantities, qtyToDeduct: number): TyreTypeQuantities {
+export function deductTypeQuantities(
+  current: TyreTypeQuantities,
+  qtyToDeduct: number,
+  preferredType?: string
+): TyreTypeQuantities {
   let remaining = qtyToDeduct
   const updated: TyreTypeQuantities = { ...current }
-  const keys: (keyof TyreTypeQuantities)[] = [
+  const defaultKeys: (keyof TyreTypeQuantities)[] = [
     'Tubeless + Radial',
     'Tubeless + Nylon',
     'Tube-Type + Nylon',
     'Tube-Type + Radial'
   ]
+  const keys =
+    preferredType && defaultKeys.includes(preferredType as keyof TyreTypeQuantities)
+      ? [preferredType as keyof TyreTypeQuantities, ...defaultKeys.filter((k) => k !== preferredType)]
+      : defaultKeys
 
   for (const k of keys) {
     if (remaining <= 0) break

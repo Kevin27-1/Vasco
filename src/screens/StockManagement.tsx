@@ -7,6 +7,7 @@ import { cn } from '../lib/utils'
 import {
   type StockItem,
   type StockStatus,
+  type TyreType,
   type TyreTypeQuantities,
   type TyreTypePrices,
   TYRE_TYPES,
@@ -55,6 +56,7 @@ export default function StockManagement({ externalSearch }: StockManagementProps
     customerName: 'Walk-in Customer',
     customerPhone: '',
     vehicleNumber: '',
+    tyreType: 'Tubeless + Radial' as TyreType,
     paymentMethod: 'UPI',
     date: new Intl.DateTimeFormat('en-CA').format(new Date())
   })
@@ -195,13 +197,17 @@ export default function StockManagement({ externalSearch }: StockManagementProps
   }
 
   const handleOpenSellModal = (item: StockItem) => {
+    const firstInStockType =
+      TYRE_TYPES.find((t) => (item.typeQuantities?.[t] || 0) > 0) || 'Tubeless + Radial'
+    const typeQty = item.typeQuantities?.[firstInStockType] || item.qty
     setSellingItem(item)
     setSellForm({
-      qty: item.qty, // Default to all remaining units so it sells out by selling
+      qty: typeQty,
       sellingPrice: item.sellingPrice || 0,
       customerName: 'Walk-in Customer',
       customerPhone: '',
       vehicleNumber: '',
+      tyreType: firstInStockType,
       paymentMethod: 'UPI',
       date: new Intl.DateTimeFormat('en-CA').format(new Date())
     })
@@ -219,6 +225,7 @@ export default function StockManagement({ externalSearch }: StockManagementProps
     setIsSubmitting(true)
     setErrorMsg(null)
     try {
+      const typeCostPrice = sellingItem.typePrices?.[sellForm.tyreType] ?? sellingItem.purchasePrice
       const created = await createSale({
         customerName: sellForm.customerName.trim() || 'Walk-in Customer',
         customerPhone: sellForm.customerPhone.trim(),
@@ -231,9 +238,10 @@ export default function StockManagement({ externalSearch }: StockManagementProps
             brand: sellingItem.brand,
             model: sellingItem.model,
             size: sellingItem.size,
+            tyreType: sellForm.tyreType,
             qty: sellForm.qty,
             price: sellForm.sellingPrice,
-            purchasePrice: sellingItem.purchasePrice
+            purchasePrice: typeCostPrice
           }
         ]
       })
@@ -755,6 +763,50 @@ export default function StockManagement({ externalSearch }: StockManagementProps
             </div>
 
             <form onSubmit={handleConfirmSell} className="space-y-4">
+              {/* Type of Tyre Sold */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-medium text-text-muted">
+                    Type of Tyre Sold <span className="text-red-400">*</span>
+                  </label>
+                  <span className="text-[11px] font-mono text-text-muted">
+                    Cost: ₹{(sellingItem.typePrices?.[sellForm.tyreType] ?? sellingItem.purchasePrice).toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {TYRE_TYPES.map((typeOption) => {
+                    const availableForType = sellingItem.typeQuantities?.[typeOption] ?? 0
+                    const isSelected = sellForm.tyreType === typeOption
+                    const isDisabled = availableForType <= 0
+                    return (
+                      <button
+                        key={typeOption}
+                        type="button"
+                        disabled={isDisabled}
+                        onClick={() =>
+                          setSellForm((f) => ({
+                            ...f,
+                            tyreType: typeOption,
+                            qty: Math.min(f.qty, availableForType) || 1
+                          }))
+                        }
+                        className={cn(
+                          "px-3 py-2 rounded-xl border text-xs font-semibold text-left transition-all flex items-center justify-between gap-1",
+                          isSelected
+                            ? "bg-accent/15 border-accent text-white shadow-sm ring-1 ring-accent/30"
+                            : isDisabled
+                            ? "bg-background/40 border-border/40 text-text-muted/40 cursor-not-allowed"
+                            : "bg-background border-border text-text-muted hover:text-white hover:border-border/80"
+                        )}
+                      >
+                        <span className="truncate">{typeOption}</span>
+                        <span className="text-[10px] font-mono shrink-0">({availableForType})</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
               {/* Quantity to sell */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
